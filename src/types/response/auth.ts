@@ -4,6 +4,7 @@ export interface UserInfo {
   id: string;
   userName: string;
   role?: string;
+  hotelId?: string;
 }
 
 export interface AuthTokens {
