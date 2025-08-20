@@ -5,7 +5,7 @@ import { Document, model, Schema } from "mongoose";
 // step 3: Create the schema for the Room model using Schema from Mongoose
 // step 4: Export the model for use in other parts of the application
 
-interface IRoom {
+export interface IRoom {
   floor: number;
   originalPrice: number;
   afterHoursPrice: number;

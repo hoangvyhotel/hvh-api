@@ -12,8 +12,7 @@ import { logger, stream } from "@/utils/logger";
 import { AppError } from "@/utils/AppError";
 
 // Import routes
-import authRoutes from "@/api/routes/auth.route";
-import roomRoutes from "@/api/routes/room.route";
+import apiRoute from "@/api/index";
 import { handleError } from "./utils/errorHandler";
 
 // Load environment variables
@@ -120,8 +119,7 @@ class App {
     });
 
     // API routes
-    this.app.use(`${basePath}/auth`, authRoutes);
-    this.app.use(`${basePath}/rooms`, roomRoutes);
+    this.app.use(basePath, apiRoute);
 
     // Root endpoint
     this.app.get("/", (req, res) => {
@@ -165,7 +163,7 @@ class App {
         logger.info(`📊 Environment: ${process.env.NODE_ENV}`);
         logger.info(`🔗 Health check: http://localhost:${this.port}/health`);
         logger.info(
-          `📚 API Base URL: http://localhost:${this.port}/api/${
+          `📚 API Base URL: http://localhost:${this.port}/api/${apiRoute}/${
             process.env.API_VERSION || "v1"
           }`
         );
