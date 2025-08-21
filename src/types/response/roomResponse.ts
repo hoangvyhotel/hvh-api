@@ -1,3 +1,5 @@
+import { BaseResponse } from "./base";
+
 export interface RoomResponse {
   id: string; // Room ID
   floor: number;
@@ -12,3 +14,5 @@ export interface RoomResponse {
   createdAt: Date; // Timestamp of when the room was created
   updatedAt: Date; // Timestamp of when the room was last updated
 }
+
+export type RoomResponseWithHotel = BaseResponse<RoomResponse[]>;

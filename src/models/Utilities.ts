@@ -6,6 +6,11 @@ const Utilities = new mongoose.Schema(
     price: { type: Number, required: true },
     icon: { type: String, required: true },
     status: { type: Boolean, required: true },
+    hotelId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Hotel",
+      required: true,
+    },
   },
   { timestamps: true }
 );

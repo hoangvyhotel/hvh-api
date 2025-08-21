@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createRoom } from "@/controllers/room.controller";
+import { createRoom, getAllRooms } from "@/controllers/room.controller";
 import {
   validateCreateRoom,
   validateUpdateRoom,
@@ -18,5 +18,6 @@ const router = Router();
  * @access Private
  */
 router.post("/", validateCreateRoom, createRoom);
+router.get("/:id", getAllRooms);
 
 export default router;
