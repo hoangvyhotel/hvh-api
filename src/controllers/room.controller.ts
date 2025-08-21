@@ -1,10 +1,15 @@
 import { NextFunction, Request, Response } from "express";
 import { CreateRoomRequest } from "@/types/request/room/CreateRoomRequest.type";
-import { catchAsyncError } from "@/utils/catchAsyncError";
+import {
+  catchAsyncError,
+  catchAsyncErrorWithCode,
+} from "@/utils/catchAsyncError";
 import { AppError } from "@/utils/AppError";
 import { ResponseHelper } from "@/utils/response";
 
 import * as roomService from "@/services/room.service";
+import { ParamsRequest } from "@/types/request";
+import { RoomResponseWithHotel } from "@/types/response/roomResponse";
 
 // CREATE - Tạo room mới
 export const createRoom = catchAsyncError(
@@ -21,4 +26,13 @@ export const createRoom = catchAsyncError(
     const response = ResponseHelper.success(room, "Tạo phòng thành công");
     res.status(201).json(response);
   }
+);
+
+export const getAllRooms = catchAsyncErrorWithCode(
+  async (req: ParamsRequest<{ id: string }>, res: Response<RoomResponseWithHotel>) => {
+    const result = await roomService.getAllRooms(req);
+
+    res.status(200).json(result);
+  },
+  "FETCH_ERROR"
 );

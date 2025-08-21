@@ -1,4 +1,4 @@
-import { Document, model, Schema } from "mongoose";
+import mongoose, { Document, model, Schema } from "mongoose";
 
 // step 1: Define the interface for the Room model
 // step 2: Define Document interface mapping from schema to collection
@@ -17,7 +17,11 @@ export interface IRoom {
   hotelId: Schema.Types.ObjectId; // Reference to the Hotel model
 }
 
-export interface IRoomDocument extends IRoom, Document {}
+export interface IRoomDocument extends IRoom, Document {
+  _id: mongoose.Types.ObjectId;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
 const roomSchema = new Schema<IRoomDocument>(
   {
