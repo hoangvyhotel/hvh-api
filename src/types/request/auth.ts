@@ -1,0 +1,45 @@
+import { BodyRequest } from "./base";
+
+export interface LoginCredentials {
+  userName?: string;
+  password: string;
+}
+
+export interface RegisterCredentials {
+  username: string;
+  password: string;
+  passwordManage: string;
+}
+
+export interface RefreshTokenRequest {
+  refreshToken: string;
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+export interface ResetPasswordRequest {
+  token: string;
+  newPassword: string;
+}
+
+export interface UpdateProfileRequest {
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+}
+
+// Request types for controllers
+export type LoginRequest = BodyRequest<LoginCredentials>;
+export type RegisterRequest = BodyRequest<RegisterCredentials>;
+export type RefreshTokenBodyRequest = BodyRequest<RefreshTokenRequest>;
+export type ChangePasswordBodyRequest = BodyRequest<ChangePasswordRequest>;
+export type ForgotPasswordBodyRequest = BodyRequest<ForgotPasswordRequest>;
+export type ResetPasswordBodyRequest = BodyRequest<ResetPasswordRequest>;
+export type UpdateProfileBodyRequest = BodyRequest<UpdateProfileRequest>;
