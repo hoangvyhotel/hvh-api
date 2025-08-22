@@ -1,13 +1,10 @@
 import * as db from "@/db/utility.db";
 import { AppError } from "@/utils/AppError";
+import { CreateUtilityInput } from "@/types/request/utility/utility";
 
-export interface ListOptions {
-  hotelId: string;
-  status?: string | boolean;
-}
 
 export class UtilityService {
-  async create(payload: any) {
+  async create(payload: CreateUtilityInput) {
     try {
       const saved = await db.createUtility(payload);
       return saved;
@@ -16,17 +13,17 @@ export class UtilityService {
       if (err && (err.code === 11000 || (err?.errorResponse && err.errorResponse.code === 11000))) {
         // include key info if present
         const meta = err.keyValue ? { keyValue: err.keyValue } : err?.errorResponse?.keyValue || {};
-        throw AppError.conflict("Tiện ích cùng tên đã tồn tại cho khách sạn này", "DUPLICATE_UTILITY", meta);
+        throw AppError.conflict("Tiện ích cùng tên đã tồn tại cho khách sạn này",  meta);
       }
 
       throw err;
     }
   }
 
-  async list(opts: ListOptions) {
+  async list(opts: { hotelId: string; status?: string | boolean }) {
     // hotelId is required — do not return all utilities
     if (!opts || !opts.hotelId) {
-      throw AppError.badRequest("hotelId là bắt buộc", "MISSING_HOTEL_ID");
+      throw AppError.badRequest("hotelId là bắt buộc");
     }
 
     const filter: any = { hotelId: opts.hotelId };
@@ -40,8 +37,8 @@ export class UtilityService {
     return db.getUtilityById(id);
   }
 
-  async update(id: string, payload: any) {
-    const updated = await db.updateUtilityById(id, payload);
+  async update(id: string, payload: Partial<CreateUtilityInput>) {
+    const updated = await db.updateUtilityById(id, payload as any);
     return updated;
   }
 
