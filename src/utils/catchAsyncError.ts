@@ -40,32 +40,30 @@ export const catchAsyncErrorWithCode = <TReq extends Request = Request>(
     try {
       await fn(req as TReq, res, next);
     } catch (error: any) {
-      if (error instanceof AppError) {
-        res.status(error.statusCode).json(ResponseHelper.fromAppError(error));
-      }
+        // Delegate error handling to the central error middleware to avoid
+        // setting headers here. This prevents "Cannot set headers after they
+        // are sent to the client" and centralizes response formatting.
+        if (res.headersSent) return next(error);
 
-      if (error instanceof jwt.JsonWebTokenError) {
-        res
-          .status(400)
-          .json(
-            ResponseHelper.error(
-              "Mã xác thực không hợp lệ hoặc đã hết hạn.",
-              "TOKEN_EXPIRED"
-            )
+        let appError: AppError;
+
+        if (error instanceof AppError) {
+          appError = error;
+        } else if (error instanceof jwt.JsonWebTokenError) {
+          appError = AppError.unauthorized(
+            "Mã xác thực không hợp lệ hoặc đã hết hạn.",
+            "TOKEN_EXPIRED"
           );
-      }
+        } else if (error && typeof error === "object" && "code" in error) {
+          appError = AppError.fromPrismaError(error);
+        } else {
+          appError = AppError.internal(
+            "An unexpected error occurred",
+            defaultErrorCode
+          );
+        }
 
-      if (error && typeof error === "object" && "code" in error) {
-        res
-          .status(500)
-          .json(ResponseHelper.fromAppError(AppError.fromPrismaError(error)));
-      }
-
-      res
-        .status(500)
-        .json(
-          ResponseHelper.error("An unexpected error occurred", defaultErrorCode)
-        );
+        return next(appError);
     }
   };
 };

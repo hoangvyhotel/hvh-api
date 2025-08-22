@@ -59,9 +59,12 @@ const sendToken = (user: any, statusCode: number, res: Response, req: any) => {
 export const login = catchAsyncErrorWithCode(async (req: LoginRequest, res: Response) => {
   const result = await authService.login(req);
 
+  // Only return user info on successful login. Tokens are not sent here.
+  const { user } = result as any;
+
   res.status(200).json(
     ResponseHelper.success(
-      result,
+      { user },
       "Login successful",
       "LOGIN_SUCCESS"
     )

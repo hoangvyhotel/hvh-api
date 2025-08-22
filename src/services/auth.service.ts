@@ -38,16 +38,22 @@ import { generateAccessToken, generateToken } from "@/utils/jwt";
 
 export class AuthService {
   async login(req: LoginRequest): Promise<LoginResponse> {
-    const { userName, password } = req.body;
+    // Accept either `userName` (camelCase) or `username` (common payload)
+    const { userName, password, username } = req.body as any;
 
-    let user: IUsersDocument | null = null;
+    const identifier = userName || username;
 
-    if (userName) {
-      user = await userDb.getUserByUserName(userName);
-      if (!user) throw AppError.notFound("NON_EXISTING_USER");
+    if (!identifier) {
+      // Missing identifier - bad request instead of ambiguous credentials error
+      throw AppError.badRequest("userName (or username) is required", "MISSING_USERNAME");
     }
 
-    if (!user || !user.password) {
+    let user: IUsersDocument | null = await userDb.getUserByUserName(identifier);
+    if (!user) {
+      throw AppError.notFound("NON_EXISTING_USER");
+    }
+
+    if (!user.password) {
       throw AppError.unauthorized("INVALID_CREDENTIALS");
     }
 

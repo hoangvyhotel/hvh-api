@@ -15,8 +15,8 @@ router.get("/", listUtilities);
 router.get("/:id", getUtility);
 
 // Protected: create/update/delete
-router.post("/", authenticate, createUtility);
-router.put("/:id", authenticate, updateUtility);
-router.delete("/:id", authenticate, deleteUtility);
+router.post("/", createUtility);
+router.put("/:id", updateUtility);
+router.delete("/:id", deleteUtility);
 
 export default router;

@@ -253,15 +253,9 @@ DELETE /api/utilities/:id
 
 Sử dụng file `test-utility-api.http` trong thư mục gốc của project để test API.
 
-### Testing với REST Client
-
-1. Mở file `test-utility-api.http`
-2. Cập nhật `@hotelId` với ID hotel thực tế
-3. Chạy từng request để test API
 
 ## Notes
 
-- Tất cả endpoint sử dụng validation middleware
 - Tên tiện ích phải duy nhất trong cùng một khách sạn
 - Sắp xếp theo createdAt (mới nhất trước) cho getAll
 - Populate hotelId trong response để lấy thông tin hotel (nếu cần)
