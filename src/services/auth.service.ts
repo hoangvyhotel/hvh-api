@@ -5,6 +5,7 @@ import {
   LoginCredentials,
   LoginRequest,
   RegisterCredentials,
+  RegisterRequest,
 } from "@/types/request/auth";
 import {
   UserInfo,
@@ -15,26 +16,9 @@ import {
 } from "@/types/response/auth";
 import * as userDb from "../db/user.db";
 import { IUsersDocument, Users } from "@/models/Users";
-import {
-  ModifiedPathsSnapshot,
-  Document,
-  Model,
-  Types,
-  ClientSession,
-  DocumentSetOptions,
-  QueryOptions,
-  MergeType,
-  UpdateQuery,
-  AnyObject,
-  PopulateOptions,
-  Query,
-  SaveOptions,
-  ToObjectOptions,
-  UpdateWithAggregationPipeline,
-  pathsToSkip,
-  Error,
-} from "mongoose";
 import { generateAccessToken, generateToken } from "@/utils/jwt";
+import { Types } from "mongoose";
+import { HotelModel } from "@/models/Hotel";
 
 export class AuthService {
   async login(req: LoginRequest): Promise<LoginResponse> {
@@ -71,34 +55,27 @@ export class AuthService {
     };
   }
 
-  /**
-   * Register new user
-   */
-  async register(credentials: RegisterCredentials): Promise<RegisterResponse> {
-    const { username, password, passwordManage } = credentials;
+  
+  async register(credentials: RegisterRequest): Promise<RegisterResponse> {
+    const { username, password, passwordManage, hotelName } = credentials.body;
+
     try {
-      // Check if user already exists
-      const existingUser = await Users.findOne({ username });
+      const existingUser = await userDb.getUserByUserName(username);
 
       if (existingUser) {
-        throw AppError.conflict("USERNAME_ALREADY_EXISTS");
+        throw AppError.conflict("Tên đăng nhập đã tồn tại trong hệ thống");
       }
 
-      // Hash passwords
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(password, salt);
       const hashedPasswordManage = await bcrypt.hash(passwordManage, salt);
 
-      // Create new user document
-      const newUser = new Users({
-        username: username,
-        password: hashedPassword,
-        passwordManage: hashedPasswordManage,
-        role: "STAFF",
-      });
-
-      // Save user to database
-      const savedUser = await newUser.save();
+      const { savedUser } = await userDb.registerUserWithHotel(
+        username,
+        hashedPassword,
+        hashedPasswordManage,
+        hotelName
+      );
 
       const userInfo: UserInfo = {
         id: (savedUser._id as Types.ObjectId).toString(),
@@ -106,39 +83,10 @@ export class AuthService {
         role: savedUser.role,
       };
 
-      const tokens = generateAccessToken(userInfo);
-
-      return {
-        user: userInfo,
-        tokens,
-      };
+      return { user: userInfo };
     } catch (error) {
-      console.error("Registration failed:", error);
-      throw error; // Re-throw để controller xử lý
+      console.error("Tạo người dùng thất bại:", error);
+      throw error;
     }
   }
-  /**
-   * Refresh access token
-   */
-  // async refreshToken(refreshToken: string): Promise<RefreshTokenResponse> {
-  //   try {
-  //     // Verify refresh token
-  //     const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET!) as any;
-
-  //     // Get user
-  //     const user = await this.getUserById(decoded.userId);
-  //     if (!user || user.Status !== "ACT") {
-  //       throw AppError.unauthorized("INVALID_REFRESH_TOKEN");
-  //     }
-
-  //     // Generate new tokens
-  //     const tokens = await this.generateTokens(user);
-
-  //     return { tokens };
-  //   } catch (error) {
-  //     throw AppError.unauthorized("INVALID_REFRESH_TOKEN");
-  //   }
-  // }
-
-  // Private helper methods
 }

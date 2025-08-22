@@ -1,5 +1,9 @@
 import { Router } from "express";
-import { createRoom, getAllRooms } from "@/controllers/room.controller";
+import {
+  createRoom,
+  getAllRooms,
+  updateRangePrice,
+} from "@/controllers/room.controller";
 import {
   validateCreateRoom,
   validateUpdateRoom,
@@ -8,6 +12,7 @@ import {
   validateHotelId,
   validateHotelIdQuery,
 } from "@/middleware/room.validation";
+import { validateRoomUpdateRange } from "@/middleware/validation";
 
 const router = Router();
 
@@ -19,5 +24,6 @@ const router = Router();
  */
 router.post("/", validateCreateRoom, createRoom);
 router.get("/:id", getAllRooms);
+router.patch("/update-range", validateRoomUpdateRange, updateRangePrice);
 
 export default router;

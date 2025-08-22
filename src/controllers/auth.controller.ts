@@ -6,7 +6,7 @@ import {
   LoginRequest,
   RegisterRequest,
 } from "@/types/request/auth";
-import { AuthenticatedRequest } from "@/types/request/base";
+import { AuthenticatedRequest, BodyRequest } from "@/types/request/base";
 
 const authService = new AuthService();
 
@@ -73,7 +73,7 @@ export const login = catchAsyncErrorWithCode(async (req: LoginRequest, res: Resp
  * Register new user
  */
 export const register = catchAsyncErrorWithCode(async (req: RegisterRequest, res: Response) => {
-  const result = await authService.register(req.body);
+  const result = await authService.register(req);
   
   res.status(201).json(
     ResponseHelper.success(

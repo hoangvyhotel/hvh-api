@@ -4,7 +4,6 @@ import {
   register,
   logout,
 } from "@/controllers/auth.controller";
-import { authenticate } from "@/middleware/auth";
 
 const router = Router();
 
@@ -15,7 +14,6 @@ router.post("/refresh-token");
 
 
 // Protected routes
-router.use(authenticate); 
 router.post("/logout", logout);
 
 export default router;
