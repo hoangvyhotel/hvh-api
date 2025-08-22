@@ -30,18 +30,17 @@ export const getAllExpenses = async (
   }
   const [year, month] = date.split("-").map(Number);
 
-  const startDate = new Date(year, month - 1, 1, 0, 0, 0, 0);
-  const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+const startDate = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
+const endDate = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
+
+  console.log("start", startDate);
+  console.log("end", endDate);
 
   const expenses = await expenseDb.getAllExpenses(id, startDate, endDate);
 
-  if (!expenses || expenses.length === 0) {
-    throw new Error("Không tìm thấy chi phí tương ứng với khách sạn này");
-  }
-
   return ResponseHelper.success(
     expenses,
-    "Lấy danh sách chi phí thành công",
+    "Lấy danh sách chi phí thành công!",
     "FETCH_SUCCESS"
   );
 };

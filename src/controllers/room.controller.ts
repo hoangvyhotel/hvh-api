@@ -8,8 +8,10 @@ import { AppError } from "@/utils/AppError";
 import { ResponseHelper } from "@/utils/response";
 
 import * as roomService from "@/services/room.service";
-import { ParamsRequest } from "@/types/request";
+import { BodyRequest, ParamsRequest } from "@/types/request";
 import { RoomResponseWithHotel } from "@/types/response/roomResponse";
+import { BaseResponse } from "@/types/response";
+import { UpdateRangePrice } from "@/types/request/room/UpdateRangePriceRequest.type";
 
 // CREATE - Tạo room mới
 export const createRoom = catchAsyncError(
@@ -35,4 +37,12 @@ export const getAllRooms = catchAsyncErrorWithCode(
     res.status(200).json(result);
   },
   "FETCH_ERROR"
+);
+
+export const updateRangePrice = catchAsyncErrorWithCode(
+  async (req: BodyRequest<UpdateRangePrice>, res: Response<BaseResponse<null>>) => {
+    const result = await roomService.updateRangePrice(req);
+    res.status(201).json(result);
+  },
+  "UPDATE_RANGE_ERROR"
 );
