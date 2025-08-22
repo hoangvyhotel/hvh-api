@@ -1,4 +1,4 @@
-# Utility API Documentation
+# Tài liệu API Tiện ích
 
 ## Tổng quan
 
@@ -35,7 +35,7 @@ POST /api/utilities
 ```json
 {
 	"succeeded": true,
-	"message": "Utility created",
+	"message": "Tạo tiện ích thành công",
 	"statusCode": 201,
 	"code": "UTILITY_CREATE_SUCCESS",
 	"data": {
@@ -67,7 +67,7 @@ GET /api/utilities?hotelId=60d5ecb54b24c2001f6479a1&status=true
 ```json
 {
 	"succeeded": true,
-	"message": "Utilities fetched",
+	"message": "Lấy danh sách tiện ích thành công",
 	"statusCode": 200,
 	"code": "UTILITY_LIST_SUCCESS",
 	"data": [
@@ -98,7 +98,7 @@ GET /api/utilities/:id
 ```json
 {
 	"succeeded": true,
-	"message": "Utility fetched",
+	"message": "Lấy thông tin tiện ích thành công",
 	"statusCode": 200,
 	"code": "UTILITY_GET_SUCCESS",
 	"data": {
@@ -138,7 +138,7 @@ PUT /api/utilities/:id
 ```json
 {
 	"succeeded": true,
-	"message": "Utility updated",
+	"message": "Cập nhật tiện ích thành công",
 	"statusCode": 200,
 	"code": "UTILITY_UPDATE_SUCCESS",
 	"data": {
@@ -166,7 +166,7 @@ DELETE /api/utilities/:id
 ```json
 {
 	"succeeded": true,
-	"message": "Utility deleted",
+	"message": "Xóa tiện ích thành công",
 	"statusCode": 200,
 	"code": "UTILITY_DELETE_SUCCESS",
 	"data": { "deleted": true },
@@ -208,12 +208,12 @@ DELETE /api/utilities/:id
 
 ## Error Responses
 
-### Validation Error (400)
+### Lỗi xác thực (400)
 
 ```json
 {
 	"succeeded": false,
-	"message": "hotelId is required",
+	"message": "hotelId là bắt buộc",
 	"statusCode": 400,
 	"code": "MISSING_HOTEL_ID",
 	"data": null,
@@ -221,12 +221,12 @@ DELETE /api/utilities/:id
 }
 ```
 
-### Duplicate Utility Error (409)
+### Lỗi trùng tiện ích (409)
 
 ```json
 {
 	"succeeded": false,
-	"message": "Utility with the same name already exists for this hotel",
+	"message": "Tiện ích cùng tên đã tồn tại cho khách sạn này",
 	"statusCode": 409,
 	"code": "DUPLICATE_UTILITY",
 	"data": null,
@@ -234,12 +234,12 @@ DELETE /api/utilities/:id
 }
 ```
 
-### Not Found Error (404)
+### Lỗi không tìm thấy (404)
 
 ```json
 {
 	"succeeded": false,
-	"message": "Resource not found",
+	"message": "Không tìm thấy tài nguyên",
 	"statusCode": 404,
 	"code": "NOT_FOUND",
 	"data": null,

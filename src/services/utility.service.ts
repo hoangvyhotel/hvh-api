@@ -16,7 +16,7 @@ export class UtilityService {
       if (err && (err.code === 11000 || (err?.errorResponse && err.errorResponse.code === 11000))) {
         // include key info if present
         const meta = err.keyValue ? { keyValue: err.keyValue } : err?.errorResponse?.keyValue || {};
-        throw AppError.conflict("Utility with the same name already exists for this hotel", "DUPLICATE_UTILITY", meta);
+        throw AppError.conflict("Tiện ích cùng tên đã tồn tại cho khách sạn này", "DUPLICATE_UTILITY", meta);
       }
 
       throw err;
@@ -26,7 +26,7 @@ export class UtilityService {
   async list(opts: ListOptions) {
     // hotelId is required — do not return all utilities
     if (!opts || !opts.hotelId) {
-      throw AppError.badRequest("hotelId is required", "MISSING_HOTEL_ID");
+      throw AppError.badRequest("hotelId là bắt buộc", "MISSING_HOTEL_ID");
     }
 
     const filter: any = { hotelId: opts.hotelId };

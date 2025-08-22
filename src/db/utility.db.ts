@@ -1,13 +1,6 @@
 import UtilityModel from "../models/Utility";
 import { Types } from "mongoose";
-
-export interface CreateUtilityInput {
-  name: string;
-  price: number;
-  icon?: string;
-  status?: boolean;
-  hotelId: Types.ObjectId | string;
-}
+import { CreateUtilityInput } from "../types/request/utility/utility";
 
 export async function findUtilities(filter: Record<string, any> = {}) {
   const _filter: any = filter || {};

@@ -15,25 +15,7 @@ import {
 } from "@/types/response/auth";
 import * as userDb from "../db/user.db";
 import { IUsersDocument, Users } from "@/models/Users";
-import {
-  ModifiedPathsSnapshot,
-  Document,
-  Model,
-  Types,
-  ClientSession,
-  DocumentSetOptions,
-  QueryOptions,
-  MergeType,
-  UpdateQuery,
-  AnyObject,
-  PopulateOptions,
-  Query,
-  SaveOptions,
-  ToObjectOptions,
-  UpdateWithAggregationPipeline,
-  pathsToSkip,
-  Error,
-} from "mongoose";
+import { Types } from "mongoose";
 import { generateAccessToken, generateToken } from "@/utils/jwt";
 
 export class AuthService {
@@ -44,23 +26,23 @@ export class AuthService {
     const identifier = userName || username;
 
     if (!identifier) {
-      // Missing identifier - bad request instead of ambiguous credentials error
-      throw AppError.badRequest("userName (or username) is required", "MISSING_USERNAME");
+      // Thiếu identifier - trả về lỗi yêu cầu
+      throw AppError.badRequest("Vui lòng cung cấp userName hoặc username");
     }
 
     let user: IUsersDocument | null = await userDb.getUserByUserName(identifier);
     if (!user) {
-      throw AppError.notFound("NON_EXISTING_USER");
+      throw AppError.notFound("Người dùng không tồn tại");
     }
 
     if (!user.password) {
-      throw AppError.unauthorized("INVALID_CREDENTIALS");
+      throw AppError.unauthorized("Thông tin đăng nhập không hợp lệ");
     }
 
     // Verify password
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
-      throw AppError.unauthorized("WRONG_PASSWORD");
+      throw AppError.unauthorized("Mật khẩu không đúng");
     }
     const userInfo: UserInfo = {
       id: (user._id as Types.ObjectId).toString(),
@@ -87,7 +69,7 @@ export class AuthService {
       const existingUser = await Users.findOne({ username });
 
       if (existingUser) {
-        throw AppError.conflict("USERNAME_ALREADY_EXISTS");
+        throw AppError.conflict("Tên đăng nhập đã tồn tại");
       }
 
       // Hash passwords
@@ -119,32 +101,8 @@ export class AuthService {
         tokens,
       };
     } catch (error) {
-      console.error("Registration failed:", error);
+      console.error("Đăng ký thất bại:", error);
       throw error; // Re-throw để controller xử lý
     }
   }
-  /**
-   * Refresh access token
-   */
-  // async refreshToken(refreshToken: string): Promise<RefreshTokenResponse> {
-  //   try {
-  //     // Verify refresh token
-  //     const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET!) as any;
-
-  //     // Get user
-  //     const user = await this.getUserById(decoded.userId);
-  //     if (!user || user.Status !== "ACT") {
-  //       throw AppError.unauthorized("INVALID_REFRESH_TOKEN");
-  //     }
-
-  //     // Generate new tokens
-  //     const tokens = await this.generateTokens(user);
-
-  //     return { tokens };
-  //   } catch (error) {
-  //     throw AppError.unauthorized("INVALID_REFRESH_TOKEN");
-  //   }
-  // }
-
-  // Private helper methods
 }
