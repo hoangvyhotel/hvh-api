@@ -37,6 +37,9 @@
   "homepage": "https://github.com/hoangvyhotel/hvh-api#readme",
   "dependencies": {
     "@prisma/client": "^6.14.0",
+
+    "@tailwindcss/vite": "^4.1.12",
+
     "@types/mongoose": "^5.11.96",
     "bcryptjs": "^2.4.3",
     "commander": "^11.1.0",

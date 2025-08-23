@@ -40,32 +40,33 @@ export const catchAsyncErrorWithCode = <TReq extends Request = Request>(
     try {
       await fn(req as TReq, res, next);
     } catch (error: any) {
-      if (error instanceof AppError) {
-        res.status(error.statusCode).json(ResponseHelper.fromAppError(error));
-      }
+        if (res.headersSent) return next(error);
 
-      if (error instanceof jwt.JsonWebTokenError) {
-        res
-          .status(400)
-          .json(
-            ResponseHelper.error(
-              "Mã xác thực không hợp lệ hoặc đã hết hạn.",
-              "TOKEN_EXPIRED"
-            )
+        let appError: AppError;
+
+        // Log the original error for debugging (server console)
+        try {
+          console.error("[catchAsyncError] original error:", error && error.stack ? error.stack : error);
+        } catch (logErr) {
+          // ignore logging errors
+        }
+
+        if (error instanceof AppError) {
+          appError = error;
+        } else if (error instanceof jwt.JsonWebTokenError) {
+          appError = AppError.unauthorized(
+            "Mã xác thực không hợp lệ hoặc đã hết hạn.",
+            "TOKEN_EXPIRED"
           );
-      }
-
-      if (error && typeof error === "object" && "code" in error) {
-        res
-          .status(500)
-          .json(ResponseHelper.fromAppError(AppError.fromPrismaError(error)));
-      }
-
-      res
-        .status(500)
-        .json(
-          ResponseHelper.error("An unexpected error occurred", defaultErrorCode)
-        );
+        } else if (error && typeof error === "object" && "code" in error) {
+          appError = AppError.fromPrismaError(error);
+        } else {
+          appError = AppError.internal(
+            "An unexpected error occurred",
+            defaultErrorCode
+          );
+        }
+        return next(appError);
     }
   };
 };
