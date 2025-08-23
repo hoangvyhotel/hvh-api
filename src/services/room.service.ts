@@ -3,9 +3,12 @@ import { CreateRoomRequest } from "@/types/request/room/CreateRoomRequest.type";
 import { Types } from "mongoose";
 
 import * as roomDb from "@/db/room.db";
-import { ParamsRequest } from "@/types/request";
+import { BodyRequest, ParamsRequest } from "@/types/request";
 import { RoomResponseWithHotel } from "@/types/response/roomResponse";
 import { ResponseHelper } from "@/utils/response";
+import { BaseResponse } from "@/types/response";
+import { AppError } from "@/utils/AppError";
+import { UpdateRangePrice } from "@/types/request/room/UpdateRangePriceRequest.type";
 
 // CREATE - Tạo room mới
 export async function create(request: CreateRoomRequest) {
@@ -39,3 +42,31 @@ export const getAllRooms = async (
   );
 };
 
+export const updateRangePrice = async (
+  req: BodyRequest<UpdateRangePrice>
+): Promise<BaseResponse<null>> => {
+  const { data, typePrice } = req.body;
+
+  let fieldName = "";
+  switch (typePrice) {
+    case "hours":
+      fieldName = "afterHoursPrice";
+      break;
+    case "day":
+      fieldName = "dayPrice";
+      break;
+    case "night":
+      fieldName = "nightPrice";
+      break;
+    default:
+      throw new Error("Loại giá không hợp lệ");
+  }
+
+  const roomIds = data.map((d) => d.roomId);
+  const existing = await roomDb.existingRooms(roomIds);
+  if (existing.length !== roomIds.length) {
+    throw AppError.badRequest("Yêu cầu không hợp lệ!");
+  }
+  await roomDb.updateRangePrice(data, fieldName);
+  return ResponseHelper.success(null, "Cập nhật thành công");
+};

@@ -10,6 +10,7 @@ import { AuthenticatedRequest } from "@/types/request/base";
 import { AdminLoginRequest } from "@/types/request/auth";
 
 
+
 const authService = new AuthService();
 
 /**
@@ -91,7 +92,7 @@ export const loginWithAdmin = catchAsyncErrorWithCode(async (req: AdminLoginRequ
  * Register new user
  */
 export const register = catchAsyncErrorWithCode(async (req: RegisterRequest, res: Response) => {
-  const result = await authService.register(req.body);
+  const result = await authService.register(req);
   
   res.status(201).json(
     ResponseHelper.success(

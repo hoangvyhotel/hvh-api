@@ -5,9 +5,7 @@ import {
   LoginCredentials,
   LoginRequest,
   RegisterCredentials,
-
   AdminLoginRequest,
-
 } from "@/types/request/auth";
 import {
   UserInfo,
@@ -18,6 +16,7 @@ import {
 } from "@/types/response/auth";
 import * as userDb from "../db/user.db";
 import { IUsersDocument, Users } from "@/models/Users";
+
 import { Types } from "mongoose";
 import {
   ModifiedPathsSnapshot,
@@ -39,6 +38,8 @@ import {
   Error,
 } from "mongoose";
 import { generateAccessToken, generateToken } from "@/utils/jwt";
+import { Types } from "mongoose";
+import { HotelModel } from "@/models/Hotel";
 
 export class AuthService {
   async login(req: LoginRequest): Promise<LoginResponse> {
@@ -93,34 +94,27 @@ export class AuthService {
     };
   }
 
-  /**
-   * Register new user
-   */
-  async register(credentials: RegisterCredentials): Promise<RegisterResponse> {
-    const { username, password, passwordManage } = credentials;
+  
+  async register(credentials: RegisterRequest): Promise<RegisterResponse> {
+    const { username, password, passwordManage, hotelName } = credentials.body;
+
     try {
-      // Check if user already exists
-      const existingUser = await Users.findOne({ username });
+      const existingUser = await userDb.getUserByUserName(username);
 
       if (existingUser) {
-        throw AppError.conflict("Tên đăng nhập đã tồn tại");
+        throw AppError.conflict("Tên đăng nhập đã tồn tại trong hệ thống");
       }
 
-      // Hash passwords
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(password, salt);
       const hashedPasswordManage = await bcrypt.hash(passwordManage, salt);
 
-      // Create new user document
-      const newUser = new Users({
-        username: username,
-        password: hashedPassword,
-        passwordManage: hashedPasswordManage,
-        role: "STAFF",
-      });
-
-      // Save user to database
-      const savedUser = await newUser.save();
+      const { savedUser } = await userDb.registerUserWithHotel(
+        username,
+        hashedPassword,
+        hashedPasswordManage,
+        hotelName
+      );
 
       const userInfo: UserInfo = {
         id: (savedUser._id as Types.ObjectId).toString(),
@@ -128,12 +122,7 @@ export class AuthService {
         role: savedUser.role,
       };
 
-      const tokens = generateAccessToken(userInfo);
-
-      return {
-        user: userInfo,
-        tokens,
-      };
+      return { user: userInfo };
     } catch (error) {
       console.error("Đăng ký thất bại:", error);
       throw error; // Re-throw để controller xử lý
@@ -170,5 +159,9 @@ export class AuthService {
     const tokens = await generateAccessToken(userInfo);
 
     return { user: userInfo, tokens };
+  }
+      console.error("Tạo người dùng thất bại:", error);
+      throw error;
+    }
   }
 }
