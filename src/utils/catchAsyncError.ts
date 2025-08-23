@@ -40,9 +40,6 @@ export const catchAsyncErrorWithCode = <TReq extends Request = Request>(
     try {
       await fn(req as TReq, res, next);
     } catch (error: any) {
-        // Delegate error handling to the central error middleware to avoid
-        // setting headers here. This prevents "Cannot set headers after they
-        // are sent to the client" and centralizes response formatting.
         if (res.headersSent) return next(error);
 
         let appError: AppError;
@@ -69,7 +66,6 @@ export const catchAsyncErrorWithCode = <TReq extends Request = Request>(
             defaultErrorCode
           );
         }
-
         return next(appError);
     }
   };

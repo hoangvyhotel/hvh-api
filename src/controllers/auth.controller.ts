@@ -9,6 +9,7 @@ import {
 import { AuthenticatedRequest } from "@/types/request/base";
 import { AdminLoginRequest } from "@/types/request/auth";
 
+
 const authService = new AuthService();
 
 /**
@@ -59,18 +60,16 @@ const sendToken = (user: any, statusCode: number, res: Response, req: any) => {
  */
 export const login = catchAsyncErrorWithCode(async (req: LoginRequest, res: Response) => {
   const result = await authService.login(req);
-
-  // Only return user info on successful login. Tokens are not sent here.
-  const { user } = result as any;
-
+},
   res.status(200).json(
     ResponseHelper.success(
-      { user },
+      result,
       "Login successful",
       "LOGIN_SUCCESS"
     )
   );
 }, "LOGIN_ERROR");
+
 
 /**
  * Admin login using username + passwordManage
@@ -87,7 +86,6 @@ export const loginWithAdmin = catchAsyncErrorWithCode(async (req: AdminLoginRequ
     )
   );
 }, "LOGIN_ADMIN_ERROR");
-
 
 /**
  * Register new user

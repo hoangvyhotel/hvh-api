@@ -5,7 +5,9 @@ import {
   LoginCredentials,
   LoginRequest,
   RegisterCredentials,
+
   AdminLoginRequest,
+
 } from "@/types/request/auth";
 import {
   UserInfo,
@@ -17,10 +19,30 @@ import {
 import * as userDb from "../db/user.db";
 import { IUsersDocument, Users } from "@/models/Users";
 import { Types } from "mongoose";
+import {
+  ModifiedPathsSnapshot,
+  Document,
+  Model,
+  Types,
+  ClientSession,
+  DocumentSetOptions,
+  QueryOptions,
+  MergeType,
+  UpdateQuery,
+  AnyObject,
+  PopulateOptions,
+  Query,
+  SaveOptions,
+  ToObjectOptions,
+  UpdateWithAggregationPipeline,
+  pathsToSkip,
+  Error,
+} from "mongoose";
 import { generateAccessToken, generateToken } from "@/utils/jwt";
 
 export class AuthService {
   async login(req: LoginRequest): Promise<LoginResponse> {
+
     // Accept either `userName` (camelCase) or `username` (common payload)
     const { userName, password, username } = req.body as any;
 
@@ -35,15 +57,26 @@ export class AuthService {
     if (!user) {
       throw AppError.notFound("Người dùng không tồn tại");
     }
-
     if (!user.password) {
       throw AppError.unauthorized("Thông tin đăng nhập không hợp lệ");
+    const { userName, password } = req.body;
+
+    let user: IUsersDocument | null = null;
+
+    if (userName) {
+      user = await userDb.getUserByUserName(userName);
+      if (!user) throw AppError.notFound("NON_EXISTING_USER");
+    }
+
+    if (!user || !user.password) {
+      throw AppError.unauthorized("INVALID_CREDENTIALS");
     }
 
     // Verify password
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       throw AppError.unauthorized("Mật khẩu không đúng");
+      throw AppError.unauthorized("WRONG_PASSWORD");
     }
     const userInfo: UserInfo = {
       id: (user._id as Types.ObjectId).toString(),
