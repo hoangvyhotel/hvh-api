@@ -23,7 +23,7 @@ const router = Router();
  * @access Private
  */
 router.post("/", validateCreateRoom, createRoom);
-router.get("/:id", getAllRooms);
+router.get("/", getAllRooms);
 router.patch("/update-range", validateRoomUpdateRange, updateRangePrice);
 
 export default router;

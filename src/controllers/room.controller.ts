@@ -8,7 +8,7 @@ import { AppError } from "@/utils/AppError";
 import { ResponseHelper } from "@/utils/response";
 
 import * as roomService from "@/services/room.service";
-import { BodyRequest, ParamsRequest } from "@/types/request";
+import { BodyRequest, ParamsRequest, QueryRequest } from "@/types/request";
 import { RoomResponseWithHotel } from "@/types/response/roomResponse";
 import { BaseResponse } from "@/types/response";
 import { UpdateRangePrice } from "@/types/request/room/UpdateRangePriceRequest.type";
@@ -31,16 +31,21 @@ export const createRoom = catchAsyncError(
 );
 
 export const getAllRooms = catchAsyncErrorWithCode(
-  async (req: ParamsRequest<{ id: string }>, res: Response<RoomResponseWithHotel>) => {
+  async (
+    req: QueryRequest<{ id: string; isGetAll?: string }>,
+    res: Response<RoomResponseWithHotel>
+  ) => {
     const result = await roomService.getAllRooms(req);
-
     res.status(200).json(result);
   },
   "FETCH_ERROR"
 );
 
 export const updateRangePrice = catchAsyncErrorWithCode(
-  async (req: BodyRequest<UpdateRangePrice>, res: Response<BaseResponse<null>>) => {
+  async (
+    req: BodyRequest<UpdateRangePrice>,
+    res: Response<BaseResponse<null>>
+  ) => {
     const result = await roomService.updateRangePrice(req);
     res.status(201).json(result);
   },
