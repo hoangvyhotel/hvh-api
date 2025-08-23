@@ -3,7 +3,7 @@ import { CreateRoomRequest } from "@/types/request/room/CreateRoomRequest.type";
 import { Types } from "mongoose";
 
 import * as roomDb from "@/db/room.db";
-import { BodyRequest, ParamsRequest } from "@/types/request";
+import { BodyRequest, ParamsRequest, QueryRequest } from "@/types/request";
 import { RoomResponseWithHotel } from "@/types/response/roomResponse";
 import { ResponseHelper } from "@/utils/response";
 import { BaseResponse } from "@/types/response";
@@ -21,15 +21,19 @@ export async function create(request: CreateRoomRequest) {
 }
 
 export const getAllRooms = async (
-  req: ParamsRequest<{ id: string }>
+  req: QueryRequest<{ id: string; isGetAll?: string }>
 ): Promise<RoomResponseWithHotel> => {
-  const hotelId = req.params.id;
+  const { id, isGetAll = "false" } = req.query;
 
-  if (!Types.ObjectId.isValid(hotelId)) {
-    throw new Error("Có lỗi khi tìm kiếm khách sạn tương ứng với phòng");
+  if (!Types.ObjectId.isValid(id)) {
+    throw AppError.badRequest(
+      "Có lỗi khi tìm kiếm khách sạn tương ứng với phòng"
+    );
   }
 
-  const rooms = await roomDb.getRoomsByHotelId(hotelId);
+  const isGetAllBool = isGetAll === "true";
+
+  const rooms = await roomDb.getRoomsByHotelId(id, isGetAllBool);
 
   if (!rooms || rooms.length === 0) {
     throw new Error("Không tìm thấy phòng tương ứng với khách sạn này");

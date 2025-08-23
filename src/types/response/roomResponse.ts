@@ -2,6 +2,7 @@ import { BaseResponse } from "./base";
 
 export interface RoomResponse {
   id: string; // Room ID
+  name: string;
   floor: number;
   originalPrice: number;
   afterHoursPrice: number;

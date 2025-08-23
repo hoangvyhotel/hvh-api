@@ -8,12 +8,19 @@ export async function getRoomById(id: string) {
 }
 
 export const getRoomsByHotelId = async (
-  hotelId: string
+  hotelId: string,
+  isGetAll?: boolean
 ): Promise<RoomResponse[]> => {
-  const rooms = await RoomModel.find({ hotelId, status: true }).exec();
+  const query: any = { hotelId };
+  if (!isGetAll) {
+    query.status = true;
+  }
+
+  const rooms = await RoomModel.find(query).exec();
 
   return rooms.map((room) => ({
     id: room._id.toString(),
+    name: room.name ?? "",
     floor: room.floor,
     originalPrice: room.originalPrice,
     afterHoursPrice: room.afterHoursPrice,

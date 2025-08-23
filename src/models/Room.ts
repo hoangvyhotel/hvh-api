@@ -7,6 +7,7 @@ import mongoose, { Document, model, Schema } from "mongoose";
 
 export interface IRoom {
   floor: number;
+  name: string;
   originalPrice: number;
   afterHoursPrice: number;
   dayPrice: number;
@@ -26,6 +27,7 @@ export interface IRoomDocument extends IRoom, Document {
 const roomSchema = new Schema<IRoomDocument>(
   {
     floor: { type: Number, required: true },
+    name: { type: String, required: true },
     originalPrice: { type: Number, required: true },
     afterHoursPrice: { type: Number, required: true },
     dayPrice: { type: Number, required: true },
