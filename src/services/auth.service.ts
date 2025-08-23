@@ -5,7 +5,13 @@ import {
   LoginCredentials,
   LoginRequest,
   RegisterCredentials,
+<<<<<<< HEAD
   AdminLoginRequest,
+=======
+
+  AdminLoginRequest,
+
+>>>>>>> 077917dbd9b458b1f6c84f988ed3d50ca0e0c572
 } from "@/types/request/auth";
 import {
   UserInfo,
@@ -17,10 +23,36 @@ import {
 import * as userDb from "../db/user.db";
 import { IUsersDocument, Users } from "@/models/Users";
 import { Types } from "mongoose";
+<<<<<<< HEAD
+=======
+import {
+  ModifiedPathsSnapshot,
+  Document,
+  Model,
+  Types,
+  ClientSession,
+  DocumentSetOptions,
+  QueryOptions,
+  MergeType,
+  UpdateQuery,
+  AnyObject,
+  PopulateOptions,
+  Query,
+  SaveOptions,
+  ToObjectOptions,
+  UpdateWithAggregationPipeline,
+  pathsToSkip,
+  Error,
+} from "mongoose";
+>>>>>>> 077917dbd9b458b1f6c84f988ed3d50ca0e0c572
 import { generateAccessToken, generateToken } from "@/utils/jwt";
 
 export class AuthService {
   async login(req: LoginRequest): Promise<LoginResponse> {
+<<<<<<< HEAD
+=======
+
+>>>>>>> 077917dbd9b458b1f6c84f988ed3d50ca0e0c572
     // Accept either `userName` (camelCase) or `username` (common payload)
     const { userName, password, username } = req.body as any;
 
@@ -35,15 +67,32 @@ export class AuthService {
     if (!user) {
       throw AppError.notFound("Người dùng không tồn tại");
     }
-
     if (!user.password) {
       throw AppError.unauthorized("Thông tin đăng nhập không hợp lệ");
+<<<<<<< HEAD
+=======
+    const { userName, password } = req.body;
+
+    let user: IUsersDocument | null = null;
+
+    if (userName) {
+      user = await userDb.getUserByUserName(userName);
+      if (!user) throw AppError.notFound("NON_EXISTING_USER");
+    }
+
+    if (!user || !user.password) {
+      throw AppError.unauthorized("INVALID_CREDENTIALS");
+>>>>>>> 077917dbd9b458b1f6c84f988ed3d50ca0e0c572
     }
 
     // Verify password
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       throw AppError.unauthorized("Mật khẩu không đúng");
+<<<<<<< HEAD
+=======
+      throw AppError.unauthorized("WRONG_PASSWORD");
+>>>>>>> 077917dbd9b458b1f6c84f988ed3d50ca0e0c572
     }
     const userInfo: UserInfo = {
       id: (user._id as Types.ObjectId).toString(),

@@ -69,7 +69,6 @@ export const catchAsyncErrorWithCode = <TReq extends Request = Request>(
             defaultErrorCode
           );
         }
-
         return next(appError);
     }
   };
