@@ -5,6 +5,11 @@ export interface LoginCredentials {
   password: string;
 }
 
+export interface AdminLoginCredentials {
+  username: string;
+  passwordManage: string;
+}
+
 export interface RegisterCredentials {
   username: string;
   password: string;
@@ -37,6 +42,7 @@ export interface UpdateProfileRequest {
 
 // Request types for controllers
 export type LoginRequest = BodyRequest<LoginCredentials>;
+export type AdminLoginRequest = BodyRequest<AdminLoginCredentials>;
 export type RegisterRequest = BodyRequest<RegisterCredentials>;
 export type RefreshTokenBodyRequest = BodyRequest<RefreshTokenRequest>;
 export type ChangePasswordBodyRequest = BodyRequest<ChangePasswordRequest>;

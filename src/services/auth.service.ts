@@ -5,6 +5,7 @@ import {
   LoginCredentials,
   LoginRequest,
   RegisterCredentials,
+  AdminLoginRequest,
 } from "@/types/request/auth";
 import {
   UserInfo,
@@ -104,5 +105,37 @@ export class AuthService {
       console.error("Đăng ký thất bại:", error);
       throw error; // Re-throw để controller xử lý
     }
+  }
+
+  /**
+   * Login using admin credentials (username + passwordManage)
+   */
+  async loginWithAdmin(req: AdminLoginRequest): Promise<LoginResponse> {
+    const { username, passwordManage } = req.body;
+
+    if (!username || !passwordManage) {
+      throw AppError.badRequest("Vui lòng cung cấp username và passwordManage", "MISSING_CREDENTIALS");
+    }
+
+    const user = await userDb.getUserByUserName(username);
+    if (!user) {
+      throw AppError.notFound("Người dùng không tồn tại", "NON_EXISTING_USER");
+    }
+
+    // Verify passwordManage
+    const isValid = await bcrypt.compare(passwordManage, user.passwordManage || "");
+    if (!isValid) {
+      throw AppError.unauthorized("Thông tin quản trị không hợp lệ", "INVALID_ADMIN_CREDENTIALS");
+    }
+
+    const userInfo: UserInfo = {
+      id: (user._id as Types.ObjectId).toString(),
+      userName: user.username,
+      role: user.role,
+    };
+
+    const tokens = await generateAccessToken(userInfo);
+
+    return { user: userInfo, tokens };
   }
 }

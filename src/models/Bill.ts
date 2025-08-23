@@ -1,16 +1,21 @@
-import mongoose from "mongoose";
+import mongoose, { Document, Schema } from "mongoose";
 
-const BillSchema = new mongoose.Schema(
+export interface IBill extends Document {
+  totalRoomPrice: number;
+  totalUtilitiesPrice: number;
+  roomId: mongoose.Types.ObjectId;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+const BillSchema = new Schema<IBill>(
   {
-    totalRoomPrice: { type: Number, required: true },
-    totalUtilitiesPrice: { type: Number, required: true },
-    roomId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Room",
-      required: true,
-    },
+    totalRoomPrice: { type: Number, required: true, min: 0 },
+    totalUtilitiesPrice: { type: Number, required: true, min: 0 },
+    roomId: { type: Schema.Types.ObjectId, ref: "Room", required: true, index: true },
   },
   { timestamps: true }
 );
 
-module.exports = mongoose.model("Bill", BillSchema);
+const Bill = mongoose.model<IBill>("Bill", BillSchema);
+export default Bill;

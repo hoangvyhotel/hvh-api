@@ -7,6 +7,7 @@ import {
   RegisterRequest,
 } from "@/types/request/auth";
 import { AuthenticatedRequest } from "@/types/request/base";
+import { AdminLoginRequest } from "@/types/request/auth";
 
 const authService = new AuthService();
 
@@ -70,6 +71,22 @@ export const login = catchAsyncErrorWithCode(async (req: LoginRequest, res: Resp
     )
   );
 }, "LOGIN_ERROR");
+
+/**
+ * Admin login using username + passwordManage
+ */
+export const loginWithAdmin = catchAsyncErrorWithCode(async (req: AdminLoginRequest, res: Response) => {
+  const result = await authService.loginWithAdmin(req);
+  const { user } = result as any;
+
+  res.status(200).json(
+    ResponseHelper.success(
+      { user },
+      "Admin login successful",
+      "LOGIN_SUCCESS"
+    )
+  );
+}, "LOGIN_ADMIN_ERROR");
 
 
 /**

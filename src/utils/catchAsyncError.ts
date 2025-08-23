@@ -47,6 +47,13 @@ export const catchAsyncErrorWithCode = <TReq extends Request = Request>(
 
         let appError: AppError;
 
+        // Log the original error for debugging (server console)
+        try {
+          console.error("[catchAsyncError] original error:", error && error.stack ? error.stack : error);
+        } catch (logErr) {
+          // ignore logging errors
+        }
+
         if (error instanceof AppError) {
           appError = error;
         } else if (error instanceof jwt.JsonWebTokenError) {
