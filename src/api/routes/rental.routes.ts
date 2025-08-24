@@ -1,7 +1,13 @@
 import { Router } from "express";
-import { getDailyTotals, getMonthlyTotal } from "@/controllers/bill.controller";
+import {
+  getAllRentals,
+  getDailyTotals,
+  getMonthlyTotal,
+} from "@/controllers/rental.controller";
 
 const router = Router();
+
+router.get("/", getAllRentals);
 
 // GET /bills/daily?month=8&year=2025
 router.post("/daily", getDailyTotals);

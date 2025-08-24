@@ -1,14 +1,17 @@
 import { RoomModel } from "@/models/Room";
 import { CreateRoomRequest } from "@/types/request/room/CreateRoomRequest.type";
 import { Types } from "mongoose";
-
 import * as roomDb from "@/db/room.db";
 import { BodyRequest, ParamsRequest, QueryRequest } from "@/types/request";
-import { RoomResponseWithHotel } from "@/types/response/roomResponse";
+import {
+  RoomResponse,
+  RoomResponseWithHotel,
+} from "@/types/response/roomResponse";
 import { ResponseHelper } from "@/utils/response";
 import { BaseResponse } from "@/types/response";
 import { AppError } from "@/utils/AppError";
 import { UpdateRangePrice } from "@/types/request/room/UpdateRangePriceRequest.type";
+import { UpdateRoomRequest } from "@/types/request/room/UpdateRoomRequest.type";
 
 // CREATE - Tạo room mới
 export async function create(request: CreateRoomRequest) {
@@ -17,8 +20,82 @@ export async function create(request: CreateRoomRequest) {
     status: true, // Mặc định phòng được tạo mới là có sẵn
   });
 
-  roomDb.saveRoom(newRoom);
+  return roomDb.saveRoom(newRoom);
 }
+
+export async function updateRoom(id: string, roomData: UpdateRoomRequest) {
+  if (!Types.ObjectId.isValid(id)) {
+    throw AppError.badRequest("ID phòng không hợp lệ");
+  }
+
+  const room = await roomDb.findRoomById(id);
+  if (!room) {
+    throw AppError.notFound("Không tìm thấy phòng với ID đã cho");
+  }
+
+  Object.assign(room, roomData);
+  return roomDb.updateRoomById(id, room);
+}
+
+export async function updateStatus(id: string, status: boolean) {
+  if (!Types.ObjectId.isValid(id)) {
+    throw AppError.badRequest("ID phòng không hợp lệ");
+  }
+
+  const room = await roomDb.findRoomById(id);
+  if (!room) {
+    throw AppError.notFound("Không tìm thấy phòng với ID đã cho");
+  }
+
+  room.status = status;
+  return roomDb.updateRoomById(id, room);
+}
+
+export async function softDeleteRoom(id: string) {
+  if (!Types.ObjectId.isValid(id)) {
+    throw AppError.badRequest("ID phòng không hợp lệ");
+  }
+
+  const room = await roomDb.findRoomById(id);
+  if (!room) {
+    throw AppError.notFound("Không tìm thấy phòng với ID đã cho");
+  }
+
+  room.status = false;
+  return roomDb.updateRoomById(id, room);
+}
+
+export async function hardDeleteRoom(id: string) {
+  if (!Types.ObjectId.isValid(id)) {
+    throw AppError.badRequest("ID phòng không hợp lệ");
+  }
+
+  await roomDb.del(id);
+}
+
+export const getAllRoomsByHotelId = async (
+  req: ParamsRequest<{ id: string }>
+): Promise<RoomResponseWithHotel> => {
+  const { id } = req.params;
+
+  if (!Types.ObjectId.isValid(id)) {
+    throw AppError.badRequest(
+      "Có lỗi khi tìm kiếm khách sạn tương ứng với phòng"
+    );
+  }
+
+  const rooms = await roomDb.getRoomsByHotelId(id);
+
+  if (!rooms || rooms.length === 0) {
+    throw new Error("Không tìm thấy phòng tương ứng với khách sạn này");
+  }
+
+  return ResponseHelper.success(
+    rooms,
+    "Lấy danh sách phòng thành công",
+    "FETCH_SUCCESS"
+  );
+};
 
 export const getAllRooms = async (
   req: QueryRequest<{ id: string; isGetAll?: string }>
@@ -44,6 +121,32 @@ export const getAllRooms = async (
     "Lấy danh sách phòng thành công",
     "FETCH_SUCCESS"
   );
+};
+
+export const getRoomById = async (id: string): Promise<RoomResponse> => {
+  if (!Types.ObjectId.isValid(id)) {
+    throw AppError.badRequest("ID phòng không hợp lệ");
+  }
+
+  const room = await roomDb.findRoomById(id);
+  if (!room) {
+    throw AppError.notFound("Không tìm thấy phòng với ID đã cho");
+  }
+  return {
+    id: room._id.toString(),
+    floor: room.floor,
+    name: room.name,
+    originalPrice: room.originalPrice,
+    afterHoursPrice: room.afterHoursPrice,
+    dayPrice: room.dayPrice,
+    nightPrice: room.nightPrice,
+    description: room.description,
+    typeHire: room.typeHire,
+    status: room.status,
+    hotelId: room.hotelId.toString(),
+    createdAt: room.createdAt,
+    updatedAt: room.updatedAt,
+  };
 };
 
 export const updateRangePrice = async (

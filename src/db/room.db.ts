@@ -2,7 +2,7 @@ import { IRoom, IRoomDocument, RoomModel } from "@/models/Room";
 import { UpdatePrice } from "@/types/request/room/UpdateRangePriceRequest.type";
 import { RoomResponse } from "@/types/response/roomResponse";
 
-export async function getRoomById(id: string) {
+export async function findRoomById(id: string) {
   const room = await RoomModel.findById(id);
   return room;
 }
@@ -42,6 +42,10 @@ export async function saveRoom(room: IRoom): Promise<IRoomDocument> {
 
 export async function updateRoomById(id: string, roomData: IRoomDocument) {
   return await roomData.save();
+}
+
+export async function del(id: string) {
+  await RoomModel.findByIdAndDelete(id);
 }
 
 export const updateRangePrice = async (
