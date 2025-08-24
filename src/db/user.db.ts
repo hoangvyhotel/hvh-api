@@ -1,6 +1,11 @@
 import { startSession, Types } from "mongoose";
-import { Users } from "../models/Users";
 import { HotelModel } from "@/models/Hotel";
+import {
+  ChangePasswordBodyRequest,
+  RegisterCredentials,
+  RegisterRequest,
+} from "@/types/request";
+import { IUsers, Users } from "../models/Users";
 
 export async function getUserByUserName(username: string) {
   const user = await Users.findOne({ username });
@@ -32,3 +37,23 @@ export const registerUserWithHotel = async (
     throw error;
   }
 };
+export async function createUser(userData: RegisterCredentials): Promise<void> {
+  const newUser = new Users({
+    username: userData.username,
+    password: userData.password,
+    passwordManage: userData.passwordManage,
+  });
+
+  await newUser.save();
+}
+
+export async function updateUserPassword(
+  userId: string,
+  hasedPassword: string
+): Promise<void> {
+  await Users.findByIdAndUpdate(userId, { password: hasedPassword });
+}
+
+export async function deleteUser(userId: string): Promise<void> {
+  await Users.findByIdAndDelete(userId);
+}

@@ -4,6 +4,7 @@ import roomRoutes from "@/api/routes/room.route";
 import expenseRoutes from "@/api/routes/expense.route";
 import utilityRoutes from "@/api/routes/utility.route";
 import billRoutes from "@/api/routes/bill.route";
+import userRoutes from "@/api/routes/user.route";
 
 
 // Explicitly type the router as a Router instance
@@ -14,5 +15,6 @@ router.use("/rooms", roomRoutes);
 router.use("/expenses", expenseRoutes);
 router.use("/utilities", utilityRoutes);
 router.use("/bills", billRoutes);
+router.use("/users", userRoutes); // Assuming user routes are handled in room.route
 
 export default router;

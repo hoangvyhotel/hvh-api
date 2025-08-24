@@ -127,6 +127,12 @@ export class AuthService {
     const tokens = await generateAccessToken(userInfo);
 
     return { user: userInfo, tokens };
- 
+  }
+  // create user
+  async createUser(request: RegisterCredentials): Promise<void> {
+    const { password, passwordManage } =
+      request;
+
+    userDb.createUser(request);
   }
 }

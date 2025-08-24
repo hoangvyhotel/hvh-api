@@ -40,10 +40,6 @@ export async function saveRoom(room: IRoom): Promise<IRoomDocument> {
   return newRoom.save();
 }
 
-export async function updateRoomById(id: string, roomData: IRoomDocument) {
-  return await roomData.save();
-}
-
 export const updateRangePrice = async (
   data: UpdatePrice[],
   fieldName: string
@@ -62,3 +58,18 @@ export const updateRangePrice = async (
 export const existingRooms = async (ids: string[]) => {
   return await RoomModel.find({ _id: { $in: ids } }).select("_id");
 };
+// Update room by ID. We need pass IRoom, and ussing findByIdAndUpdate
+export async function updateRoomById(
+  id: string,
+  updateData: Partial<IRoom>
+): Promise<IRoomDocument | null> {
+  return await RoomModel.findByIdAndUpdate(id, updateData, { new: true });
+}
+
+export async function deleteRoomById(id: string) {
+  await RoomModel.deleteOne({ _id: id });
+}
+
+export async function softDeleteRoomById(id: string) {
+  await RoomModel.findByIdAndUpdate(id, { $set: { status: false } });
+}

@@ -9,8 +9,6 @@ import {
 import { AuthenticatedRequest } from "@/types/request/base";
 import { AdminLoginRequest } from "@/types/request/auth";
 
-
-
 const authService = new AuthService();
 
 /**
@@ -100,7 +98,7 @@ export const register = catchAsyncErrorWithCode(async (req: RegisterRequest, res
   res.status(201).json(
     ResponseHelper.success(
       result,
-      "User registered successfully",
+      "Tạo người dùng thành công!",
       "REGISTER_SUCCESS"
     )
   );
@@ -125,21 +123,39 @@ export const register = catchAsyncErrorWithCode(async (req: RegisterRequest, res
 /**
  * Logout user
  */
-export const logout = catchAsyncErrorWithCode(async (req: AuthenticatedRequest, res: Response) => {
-  res.cookie("token", null, {
-    expires: new Date(Date.now()),
-    httpOnly: true,
-  });
+export const logout = catchAsyncErrorWithCode(
+  async (req: AuthenticatedRequest, res: Response) => {
+    res.cookie("token", null, {
+      expires: new Date(Date.now()),
+      httpOnly: true,
+    });
 
-  res.status(200).json(
-    ResponseHelper.success(
-      {
-        message: "Logged out successfully",
-        loggedOut: true,
-      },
-      "Logout successful",
-      "LOGOUT_SUCCESS"
-    )
-  );
-}, "LOGOUT_ERROR");
+    res.status(200).json(
+      ResponseHelper.success(
+        {
+          message: "Logged out successfully",
+          loggedOut: true,
+        },
+        "Logout successful",
+        "LOGOUT_SUCCESS"
+      )
+    );
+  },
+  "LOGOUT_ERROR"
+);
 
+// create user
+export const createUser = catchAsyncErrorWithCode(
+  async (req: RegisterRequest, res: Response) => {
+    await authService.createUser(req.body);
+    res
+      .status(201)
+      .json(
+        ResponseHelper.success(
+          null,
+          "User created successfully",
+          "USER_CREATED"
+        )
+      );
+  }
+);
