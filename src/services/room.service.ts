@@ -47,8 +47,7 @@ export async function updateStatus(id: string, status: boolean) {
     throw AppError.notFound("Không tìm thấy phòng với ID đã cho");
   }
 
-  room.status = status;
-  return roomDb.updateRoomById(id, room);
+  return await roomDb.updateRoomStatus(id, status);
 }
 
 export async function softDeleteRoom(id: string) {
