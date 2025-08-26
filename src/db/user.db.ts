@@ -1,6 +1,6 @@
-import { HotelModel } from "@/models/Hotel";
+import { startSession, Types } from "mongoose";
 import { Users } from "../models/Users";
-import { Types } from "mongoose";
+import { HotelModel } from "@/models/Hotel";
 
 export async function getUserByUserName(username: string) {
   const user = await Users.findOne({ username });
@@ -31,4 +31,27 @@ export const registerUserWithHotel = async (
   } catch (error) {
     throw error;
   }
+};
+
+export const modifyPasswordUser = async (
+  userId: string,
+  newPassword: string
+) => {
+  const updatedUser = await Users.findByIdAndUpdate(userId, {
+    password: newPassword,
+    updatedAt: new Date(),
+  });
+  return updatedUser;
+};
+
+export const modifyPasswordManage = async (
+  userId: string,
+  newPasswordManage: string
+) => {
+  const updatedUser = await Users.findByIdAndUpdate(userId, {
+    passwordManage: newPasswordManage,
+    updatedAt: new Date(),
+  });
+
+  return updatedUser;
 };

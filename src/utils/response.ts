@@ -89,7 +89,7 @@ export class ResponseHelper {
    * Create a validation error response
    */
   static validationError(
-    message: string = "Validation failed",
+    message: string = "Yêu cầu không hợp lệ",
     errors: Record<string, string[]>
   ): BaseResponse<null> {
     return {

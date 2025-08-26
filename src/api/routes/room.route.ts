@@ -1,13 +1,19 @@
 import { Router } from "express";
-import { createRoom, getAllRooms } from "@/controllers/room.controller";
+import {
+  createRoom,
+  getRoomById,
+  updateRangePrice,
+  updateRoom,
+  updateStatus,
+  getAllRooms,
+  getAllRoomsByHotelId,
+} from "@/controllers/room.controller";
 import {
   validateCreateRoom,
   validateUpdateRoom,
   validateUpdateStatus,
-  validateMongoId,
-  validateHotelId,
-  validateHotelIdQuery,
 } from "@/middleware/room.validation";
+import { validateRoomUpdateRange } from "@/middleware/validation";
 
 const router = Router();
 
@@ -17,7 +23,11 @@ const router = Router();
  * @desc Tạo room mới
  * @access Private
  */
+router.get("/", getAllRooms);
+router.get("/:id", getRoomById);
 router.post("/", validateCreateRoom, createRoom);
-router.get("/:id", getAllRooms);
+router.put("/:id", validateUpdateRoom, updateRoom);
+router.patch("/status/:id", validateUpdateStatus, updateStatus);
+router.patch("/update-range", validateRoomUpdateRange, updateRangePrice);
 
 export default router;

@@ -9,7 +9,6 @@ export interface AdminLoginCredentials {
   username: string;
   passwordManage: string;
 }
-
 export interface RegisterCredentials {
   username: string;
   password: string;
@@ -22,8 +21,10 @@ export interface RefreshTokenRequest {
 }
 
 export interface ChangePasswordRequest {
+  userId: string;
   currentPassword: string;
   newPassword: string;
+  confirmPassword: string;
 }
 
 export interface ForgotPasswordRequest {

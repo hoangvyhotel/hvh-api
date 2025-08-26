@@ -49,6 +49,7 @@ export const validateCreateRoom = (
     hotelId,
   } = req.body;
   const errors: string[] = [];
+  console.log(req.body);
 
   // Validate required fields
   if (!isValidInteger(floor, 1, 50)) {

@@ -12,7 +12,7 @@ export class ValidationError extends AppError {
   public readonly errors: ValidationErrorItem[];
 
   constructor(errors: ValidationErrorItem[]) {
-    super("Validation failed", 400);
+    super("Yêu cầu không hợp lệ", 400);
     this.errors = errors;
 
     Object.setPrototypeOf(this, ValidationError.prototype);
@@ -178,6 +178,39 @@ export class ValidationMiddleware {
       description: Joi.string().max(500).optional(),
       images: Joi.array().items(Joi.string().uri()).optional(),
     }),
+    updateRangePrice: Joi.object({
+      typePrice: Joi.string()
+        .valid("hours", "day", "night")
+        .required()
+        .messages({
+          "any.only": "Loại giá phải là một trong: hours, day, night",
+          "any.required": "Trường typePrice là bắt buộc",
+          "string.base": "typePrice phải là chuỗi",
+        }),
+
+      data: Joi.array()
+        .items(
+          Joi.object({
+            roomId: Joi.string().hex().length(24).required().messages({
+              "string.hex": "roomId phải là ObjectId hợp lệ",
+              "string.length": "roomId phải có 24 ký tự",
+              "any.required": "roomId là bắt buộc",
+            }),
+            newPrice: Joi.number().min(0).required().messages({
+              "number.base": "Giá mới phải là số",
+              "number.min": "Giá mới không được nhỏ hơn 0",
+              "any.required": "Giá mới là bắt buộc",
+            }),
+          })
+        )
+        .min(1)
+        .required()
+        .messages({
+          "array.min": "Phải có ít nhất một phòng cần cập nhật",
+          "any.required": "Trường data là bắt buộc",
+          "array.base": "data phải là một mảng",
+        }),
+    }),
   };
 
   /**
@@ -311,6 +344,11 @@ export const validateRoomCreate = ValidationMiddleware.validate(
 export const validateRoomUpdate = ValidationMiddleware.validate(
   ValidationMiddleware.roomSchemas.update
 );
+
+export const validateRoomUpdateRange = ValidationMiddleware.validate(
+  ValidationMiddleware.roomSchemas.updateRangePrice
+);
+
 
 export const validateBookingCreate = ValidationMiddleware.validate(
   ValidationMiddleware.bookingSchemas.create
