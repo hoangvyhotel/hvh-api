@@ -41,7 +41,17 @@ export async function saveRoom(room: IRoom): Promise<IRoomDocument> {
 }
 
 export async function updateRoomById(id: string, roomData: IRoomDocument) {
-  return await roomData.save();
+  const updatedRoom = await roomData.save();
+  return updatedRoom;
+}
+
+export async function updateRoomStatus(id: string, status: boolean) {
+  const updatedRoom = await RoomModel.findByIdAndUpdate(
+    id,
+    { status, updatedAt: new Date() },
+    { new: true, runValidators: true }
+  );
+  return updatedRoom;
 }
 
 export async function del(id: string) {

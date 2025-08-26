@@ -7,6 +7,7 @@ import {
   RegisterCredentials,
   AdminLoginRequest,
   RegisterRequest,
+  ChangePasswordRequest,
 } from "@/types/request/auth";
 import {
   UserInfo,
@@ -23,7 +24,6 @@ import { HotelModel } from "@/models/Hotel";
 
 export class AuthService {
   async login(req: LoginRequest): Promise<LoginResponse> {
-
     // Accept either `userName` (camelCase) or `username` (common payload)
     const { userName, password, username } = req.body as any;
 
@@ -34,7 +34,9 @@ export class AuthService {
       throw AppError.badRequest("Vui lòng cung cấp userName hoặc username");
     }
 
-    let user: IUsersDocument | null = await userDb.getUserByUserName(identifier);
+    let user: IUsersDocument | null = await userDb.getUserByUserName(
+      identifier
+    );
     if (!user) {
       throw AppError.notFound("Người dùng không tồn tại");
     }
@@ -45,7 +47,6 @@ export class AuthService {
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       throw AppError.unauthorized("Mật khẩu không đúng");
-      throw AppError.unauthorized("WRONG_PASSWORD");
     }
     const userInfo: UserInfo = {
       id: (user._id as Types.ObjectId).toString(),
@@ -60,9 +61,8 @@ export class AuthService {
       user: userInfo,
       tokens,
     };
-  };
+  }
 
-  
   async register(credentials: RegisterRequest): Promise<RegisterResponse> {
     const { username, password, passwordManage, hotelName } = credentials.body;
 
@@ -104,7 +104,10 @@ export class AuthService {
     const { username, passwordManage } = req.body;
 
     if (!username || !passwordManage) {
-      throw AppError.badRequest("Vui lòng cung cấp username và passwordManage", "MISSING_CREDENTIALS");
+      throw AppError.badRequest(
+        "Vui lòng cung cấp username và passwordManage",
+        "MISSING_CREDENTIALS"
+      );
     }
 
     const user = await userDb.getUserByUserName(username);
@@ -113,9 +116,15 @@ export class AuthService {
     }
 
     // Verify passwordManage
-    const isValid = await bcrypt.compare(passwordManage, user.passwordManage || "");
+    const isValid = await bcrypt.compare(
+      passwordManage,
+      user.passwordManage || ""
+    );
     if (!isValid) {
-      throw AppError.unauthorized("Thông tin quản trị không hợp lệ", "INVALID_ADMIN_CREDENTIALS");
+      throw AppError.unauthorized(
+        "Thông tin quản trị không hợp lệ",
+        "INVALID_ADMIN_CREDENTIALS"
+      );
     }
 
     const userInfo: UserInfo = {
@@ -127,6 +136,109 @@ export class AuthService {
     const tokens = await generateAccessToken(userInfo);
 
     return { user: userInfo, tokens };
- 
+  }
+
+  async updateStaffPassword(request: ChangePasswordRequest) {
+    const { userId, currentPassword, newPassword, confirmPassword } = request;
+
+    // Validate input parameters
+    if (!userId || !currentPassword || !newPassword || !confirmPassword) {
+      throw AppError.badRequest(
+        "Thiếu thông tin bắt buộc",
+        "MISSING_REQUIRED_FIELDS"
+      );
+    }
+
+    if (!Types.ObjectId.isValid(userId)) {
+      throw AppError.badRequest("User ID không hợp lệ", "INVALID_USER_ID");
+    }
+
+    const user = await Users.findById(userId);
+
+    if (!user) {
+      throw AppError.badRequest("Không tìm thấy người dùng", "USER_NOT_FOUND");
+    }
+
+    // Check if user has a password set
+    if (!user.password) {
+      throw AppError.badRequest(
+        "Người dùng chưa có mật khẩu",
+        "NO_PASSWORD_SET"
+      );
+    }
+
+    const isPasswordValid = await bcrypt.compare(
+      currentPassword,
+      user.password
+    );
+    if (!isPasswordValid) {
+      throw AppError.badRequest(
+        "Mật khẩu hiện tại không đúng",
+        "INCORRECT_CURRENT_PASSWORD"
+      );
+    }
+
+    if (newPassword !== confirmPassword) {
+      throw AppError.badRequest(
+        "Mật khẩu mới và xác nhận mật khẩu không khớp",
+        "PASSWORD_MISMATCH"
+      );
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedNewPassword = await bcrypt.hash(newPassword, salt);
+    return await userDb.modifyPasswordUser(userId, hashedNewPassword);
+  }
+
+  async updateAdminPassword(request: ChangePasswordRequest) {
+    const { userId, currentPassword, newPassword, confirmPassword } = request;
+
+    // Validate input parameters
+    if (!userId || !currentPassword || !newPassword || !confirmPassword) {
+      throw AppError.badRequest(
+        "Thiếu thông tin bắt buộc",
+        "MISSING_REQUIRED_FIELDS"
+      );
+    }
+
+    if (!Types.ObjectId.isValid(userId)) {
+      throw AppError.badRequest("User ID không hợp lệ", "INVALID_USER_ID");
+    }
+
+    const user = await Users.findById(userId);
+
+    if (!user) {
+      throw AppError.badRequest("Không tìm thấy người dùng", "USER_NOT_FOUND");
+    }
+
+    // Check if user has a password set
+    if (!user.password) {
+      throw AppError.badRequest(
+        "Người dùng chưa có mật khẩu",
+        "NO_PASSWORD_SET"
+      );
+    }
+
+    const isPasswordValid = await bcrypt.compare(
+      currentPassword,
+      user.password
+    );
+    if (!isPasswordValid) {
+      throw AppError.badRequest(
+        "Mật khẩu hiện tại không đúng",
+        "INCORRECT_CURRENT_PASSWORD"
+      );
+    }
+
+    if (newPassword !== confirmPassword) {
+      throw AppError.badRequest(
+        "Mật khẩu mới và xác nhận mật khẩu không khớp",
+        "PASSWORD_MISMATCH"
+      );
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedNewPassword = await bcrypt.hash(newPassword, salt);
+    return await userDb.modifyPasswordUser(userId, hashedNewPassword);
   }
 }

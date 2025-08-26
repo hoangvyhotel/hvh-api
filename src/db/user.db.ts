@@ -32,3 +32,26 @@ export const registerUserWithHotel = async (
     throw error;
   }
 };
+
+export const modifyPasswordUser = async (
+  userId: string,
+  newPassword: string
+) => {
+  const updatedUser = await Users.findByIdAndUpdate(userId, {
+    password: newPassword,
+    updatedAt: new Date(),
+  });
+  return updatedUser;
+};
+
+export const modifyPasswordManage = async (
+  userId: string,
+  newPasswordManage: string
+) => {
+  const updatedUser = await Users.findByIdAndUpdate(userId, {
+    passwordManage: newPasswordManage,
+    updatedAt: new Date(),
+  });
+
+  return updatedUser;
+};
