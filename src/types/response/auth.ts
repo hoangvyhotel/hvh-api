@@ -26,7 +26,6 @@ export interface TwoFactorAuthResponse {
 
 export interface RegisterResponse {
   user: UserInfo;
-  tokens: string;
 }
 
 export interface RefreshTokenResponse {

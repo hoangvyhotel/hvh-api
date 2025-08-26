@@ -14,6 +14,7 @@ export interface RegisterCredentials {
   username: string;
   password: string;
   passwordManage: string;
+  hotelName: string;
 }
 
 export interface RefreshTokenRequest {

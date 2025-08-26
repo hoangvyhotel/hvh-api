@@ -8,10 +8,8 @@ import {
 } from "@/types/request/auth";
 import { AuthenticatedRequest } from "@/types/request/base";
 import { AdminLoginRequest } from "@/types/request/auth";
-<<<<<<< HEAD
-=======
 
->>>>>>> 077917dbd9b458b1f6c84f988ed3d50ca0e0c572
+
 
 const authService = new AuthService();
 
@@ -63,7 +61,6 @@ const sendToken = (user: any, statusCode: number, res: Response, req: any) => {
  */
 export const login = catchAsyncErrorWithCode(async (req: LoginRequest, res: Response) => {
   const result = await authService.login(req);
-<<<<<<< HEAD
 
   // Only return user info on successful login. Tokens are not sent here.
   const { user } = result as any;
@@ -71,22 +68,13 @@ export const login = catchAsyncErrorWithCode(async (req: LoginRequest, res: Resp
   res.status(200).json(
     ResponseHelper.success(
       { user },
-=======
-},
-  res.status(200).json(
-    ResponseHelper.success(
-      result,
->>>>>>> 077917dbd9b458b1f6c84f988ed3d50ca0e0c572
       "Login successful",
       "LOGIN_SUCCESS"
     )
   );
 }, "LOGIN_ERROR");
 
-<<<<<<< HEAD
-=======
 
->>>>>>> 077917dbd9b458b1f6c84f988ed3d50ca0e0c572
 /**
  * Admin login using username + passwordManage
  */
@@ -103,15 +91,11 @@ export const loginWithAdmin = catchAsyncErrorWithCode(async (req: AdminLoginRequ
   );
 }, "LOGIN_ADMIN_ERROR");
 
-<<<<<<< HEAD
-
-=======
->>>>>>> 077917dbd9b458b1f6c84f988ed3d50ca0e0c572
 /**
  * Register new user
  */
 export const register = catchAsyncErrorWithCode(async (req: RegisterRequest, res: Response) => {
-  const result = await authService.register(req.body);
+  const result = await authService.register(req);
   
   res.status(201).json(
     ResponseHelper.success(
@@ -158,4 +142,3 @@ export const logout = catchAsyncErrorWithCode(async (req: AuthenticatedRequest, 
     )
   );
 }, "LOGOUT_ERROR");
-

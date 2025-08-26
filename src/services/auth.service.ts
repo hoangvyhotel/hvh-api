@@ -5,13 +5,8 @@ import {
   LoginCredentials,
   LoginRequest,
   RegisterCredentials,
-<<<<<<< HEAD
   AdminLoginRequest,
-=======
-
-  AdminLoginRequest,
-
->>>>>>> 077917dbd9b458b1f6c84f988ed3d50ca0e0c572
+  RegisterRequest,
 } from "@/types/request/auth";
 import {
   UserInfo,
@@ -22,37 +17,13 @@ import {
 } from "@/types/response/auth";
 import * as userDb from "../db/user.db";
 import { IUsersDocument, Users } from "@/models/Users";
-import { Types } from "mongoose";
-<<<<<<< HEAD
-=======
-import {
-  ModifiedPathsSnapshot,
-  Document,
-  Model,
-  Types,
-  ClientSession,
-  DocumentSetOptions,
-  QueryOptions,
-  MergeType,
-  UpdateQuery,
-  AnyObject,
-  PopulateOptions,
-  Query,
-  SaveOptions,
-  ToObjectOptions,
-  UpdateWithAggregationPipeline,
-  pathsToSkip,
-  Error,
-} from "mongoose";
->>>>>>> 077917dbd9b458b1f6c84f988ed3d50ca0e0c572
 import { generateAccessToken, generateToken } from "@/utils/jwt";
+import { Types } from "mongoose";
+import { HotelModel } from "@/models/Hotel";
 
 export class AuthService {
   async login(req: LoginRequest): Promise<LoginResponse> {
-<<<<<<< HEAD
-=======
 
->>>>>>> 077917dbd9b458b1f6c84f988ed3d50ca0e0c572
     // Accept either `userName` (camelCase) or `username` (common payload)
     const { userName, password, username } = req.body as any;
 
@@ -69,30 +40,12 @@ export class AuthService {
     }
     if (!user.password) {
       throw AppError.unauthorized("Thông tin đăng nhập không hợp lệ");
-<<<<<<< HEAD
-=======
-    const { userName, password } = req.body;
-
-    let user: IUsersDocument | null = null;
-
-    if (userName) {
-      user = await userDb.getUserByUserName(userName);
-      if (!user) throw AppError.notFound("NON_EXISTING_USER");
     }
-
-    if (!user || !user.password) {
-      throw AppError.unauthorized("INVALID_CREDENTIALS");
->>>>>>> 077917dbd9b458b1f6c84f988ed3d50ca0e0c572
-    }
-
     // Verify password
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       throw AppError.unauthorized("Mật khẩu không đúng");
-<<<<<<< HEAD
-=======
       throw AppError.unauthorized("WRONG_PASSWORD");
->>>>>>> 077917dbd9b458b1f6c84f988ed3d50ca0e0c572
     }
     const userInfo: UserInfo = {
       id: (user._id as Types.ObjectId).toString(),
@@ -107,36 +60,29 @@ export class AuthService {
       user: userInfo,
       tokens,
     };
-  }
+  };
 
-  /**
-   * Register new user
-   */
-  async register(credentials: RegisterCredentials): Promise<RegisterResponse> {
-    const { username, password, passwordManage } = credentials;
+  
+  async register(credentials: RegisterRequest): Promise<RegisterResponse> {
+    const { username, password, passwordManage, hotelName } = credentials.body;
+
     try {
-      // Check if user already exists
-      const existingUser = await Users.findOne({ username });
+      const existingUser = await userDb.getUserByUserName(username);
 
       if (existingUser) {
-        throw AppError.conflict("Tên đăng nhập đã tồn tại");
+        throw AppError.conflict("Tên đăng nhập đã tồn tại trong hệ thống");
       }
 
-      // Hash passwords
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(password, salt);
       const hashedPasswordManage = await bcrypt.hash(passwordManage, salt);
 
-      // Create new user document
-      const newUser = new Users({
-        username: username,
-        password: hashedPassword,
-        passwordManage: hashedPasswordManage,
-        role: "STAFF",
-      });
-
-      // Save user to database
-      const savedUser = await newUser.save();
+      const { savedUser } = await userDb.registerUserWithHotel(
+        username,
+        hashedPassword,
+        hashedPasswordManage,
+        hotelName
+      );
 
       const userInfo: UserInfo = {
         id: (savedUser._id as Types.ObjectId).toString(),
@@ -144,12 +90,7 @@ export class AuthService {
         role: savedUser.role,
       };
 
-      const tokens = generateAccessToken(userInfo);
-
-      return {
-        user: userInfo,
-        tokens,
-      };
+  return { user: userInfo };
     } catch (error) {
       console.error("Đăng ký thất bại:", error);
       throw error; // Re-throw để controller xử lý
@@ -187,4 +128,5 @@ export class AuthService {
 
     return { user: userInfo, tokens };
   }
+  
 }
