@@ -1,6 +1,8 @@
 import { IRoom, IRoomDocument, RoomModel } from "@/models/Room";
 import { UpdatePrice } from "@/types/request/room/UpdateRangePriceRequest.type";
 import { RoomResponse } from "@/types/response/roomResponse";
+import { AppError } from "@/utils/AppError";
+import { Types } from "mongoose";
 
 export async function findRoomById(id: string) {
   const room = await RoomModel.findById(id);
@@ -76,3 +78,24 @@ export const updateRangePrice = async (
 export const existingRooms = async (ids: string[]) => {
   return await RoomModel.find({ _id: { $in: ids } }).select("_id");
 };
+
+export const getRoom = async (id: string): Promise<any> => {
+  if (!Types.ObjectId.isValid(id)) {
+    throw AppError.badRequest("ID phòng không hợp lệ");
+  }
+  const room = await RoomModel.findById(id).lean();
+  if (!room) {
+    throw AppError.notFound("Không tìm thấy phòng");
+  }
+  return room;
+};
+
+export const updateTypeHireRoom = async (roomId: string, typeHire: number, session?: any) => {
+  const result = await RoomModel.updateOne(
+    { _id: new Types.ObjectId(roomId) },
+    { $set: { typeHire } },
+    { session }
+  );
+  return result;
+};
+
