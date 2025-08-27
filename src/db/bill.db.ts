@@ -119,3 +119,77 @@ export async function getMonthlyTotalsForMonth(month: number, year?: number, hot
 	if (!res || res.length === 0) return { totalRoom: 0, totalUtilities: 0 };
 	return { totalRoom: res[0].totalRoom || 0, totalUtilities: res[0].totalUtilities || 0 };
 }
+
+/**
+ * Create a new Bill document
+ */
+export async function createBill(payload: any) {
+	// coerce roomId to ObjectId if possible
+	const p: any = { ...payload };
+	if (p.roomId && Types.ObjectId.isValid(p.roomId)) p.roomId = new Types.ObjectId(p.roomId);
+	if (p.createdAt) p.createdAt = new Date(p.createdAt);
+	const doc = new Bill(p);
+	return doc.save();
+}
+
+/**
+ * Get a bill by its id
+ */
+export async function getBillById(id: string) {
+	if (!Types.ObjectId.isValid(id)) return null;
+	return Bill.findById(new Types.ObjectId(id)).lean().exec();
+}
+
+/**
+ * Update a bill by id
+ */
+export async function updateBillById(id: string, update: any) {
+	if (!Types.ObjectId.isValid(id)) return null;
+	const u: any = { ...update };
+	if (u.roomId && Types.ObjectId.isValid(u.roomId)) u.roomId = new Types.ObjectId(u.roomId);
+	if (u.createdAt) u.createdAt = new Date(u.createdAt);
+	return Bill.findByIdAndUpdate(new Types.ObjectId(id), u, { new: true }).lean().exec();
+}
+
+/**
+ * Delete a bill by id
+ */
+export async function deleteBillById(id: string) {
+	if (!Types.ObjectId.isValid(id)) return null;
+	return Bill.findByIdAndDelete(new Types.ObjectId(id)).lean().exec();
+}
+
+/**
+ * List bills with pagination and optional filters (hotelId, roomId, from/to dates)
+ */
+export async function listBills({ page = 1, pageSize = 20, hotelId, roomId, from, to }: any) {
+	const match: any = {};
+	if (from || to) {
+		match.createdAt = {};
+		if (from) match.createdAt.$gte = new Date(from);
+		if (to) match.createdAt.$lt = new Date(to);
+	}
+	if (roomId) {
+		if (Types.ObjectId.isValid(roomId)) match.roomId = new Types.ObjectId(roomId);
+		else match.roomId = roomId;
+	}
+
+	// if hotelId provided, find room ids and filter
+	if (hotelId) {
+		const roomCandidates: any[] = [];
+		if (Types.ObjectId.isValid(hotelId)) roomCandidates.push(new Types.ObjectId(hotelId));
+		roomCandidates.push(hotelId);
+		const rooms = await RoomModel.find({ hotelId: { $in: roomCandidates } }, { _id: 1 }).lean();
+		const roomIds = rooms.map((r: any) => r._id).filter(Boolean);
+		if (roomIds.length === 0) return { data: [], total: 0 };
+		match.roomId = { $in: roomIds };
+	}
+
+	const skip = (Number(page) - 1) * Number(pageSize);
+	const [data, total] = await Promise.all([
+		Bill.find(match).sort({ createdAt: -1 }).skip(skip).limit(Number(pageSize)).lean().exec(),
+		Bill.countDocuments(match).exec(),
+	]);
+
+	return { data, total };
+}

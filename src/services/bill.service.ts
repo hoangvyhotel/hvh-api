@@ -3,6 +3,8 @@ import * as db from "@/db/bill.db";
 import { AppError } from "@/utils/AppError";
 import { RoomModel } from "@/models/Room";
 import { Types } from "mongoose";
+import { CreateBillRequest } from "@/types/request/bill/CreateBillRequest.type";
+import { UpdateBillRequest } from "@/types/request/bill/UpdateBillRequest.type";
 
 export class BillService {
 	async getDailyTotals(month: number, year?: number, hotelId?: string) {
@@ -76,10 +78,15 @@ export class BillService {
 		}
 	}
 
-	const items: Array<{ day: number; totalRoom: number; totalUtilities: number }> = [];
+	// weekday names in Vietnamese (0 = Sunday)
+	const WEEK_DAYS_VN = ["Chủ nhật", "Thứ hai", "Thứ ba", "Thứ tư", "Thứ năm", "Thứ sáu", "Thứ bảy"];
+
+	const items: Array<{ day: number; weekday: string; totalRoom: number; totalUtilities: number; total: number }> = [];
 	for (let d = 1; d <= lastDay; d++) {
-		const v = map.get(d);
-		items.push({ day: d, totalRoom: v ? v.totalRoom : 0, totalUtilities: v ? v.totalUtilities : 0 });
+		const v = map.get(d) || { totalRoom: 0, totalUtilities: 0 };
+		const dt = new Date(y, month - 1, d);
+		const weekday = WEEK_DAYS_VN[dt.getDay()] || "";
+		items.push({ day: d, weekday, totalRoom: v.totalRoom, totalUtilities: v.totalUtilities, total: Number(v.totalRoom) + Number(v.totalUtilities) });
 	}
 
 	return { items };
@@ -138,5 +145,60 @@ export class BillService {
 
 	const total = totalRoom + totalUtilities;
 	return { totals: { totalRoom, totalUtilities, total } };
+	}
+
+	// CRUD helpers
+	async createBill(payload: CreateBillRequest) {
+		if (!payload) throw AppError.badRequest("Dữ liệu không được để trống");
+		if (payload.totalRoomPrice == null || payload.totalUtilitiesPrice == null) {
+			throw AppError.badRequest("totalRoomPrice và totalUtilitiesPrice là bắt buộc");
+		}
+		if (typeof payload.totalRoomPrice !== "number" || typeof payload.totalUtilitiesPrice !== "number") {
+			throw AppError.badRequest("totalRoomPrice và totalUtilitiesPrice phải là số");
+		}
+		if (!payload.roomId) throw AppError.badRequest("roomId là bắt buộc");
+
+		// prepare object for DB (coerce createdAt if provided)
+		const toSave: any = { ...payload };
+		if (toSave.createdAt) toSave.createdAt = new Date(toSave.createdAt as any);
+
+		return await db.createBill(toSave);
+	}
+
+	async getBill(id: string) {
+		if (!id) throw AppError.badRequest("Id is required");
+		const bill = await db.getBillById(id);
+		if (!bill) throw AppError.notFound("Bill not found");
+		return bill;
+	}
+
+	async updateBill(id: string, update: UpdateBillRequest) {
+		if (!id) throw AppError.badRequest("Id là bắt buộc");
+		if (!update || Object.keys(update).length === 0) throw AppError.badRequest("Dữ liệu cập nhật không được để trống");
+		if (update.totalRoomPrice != null && typeof update.totalRoomPrice !== "number") {
+			throw AppError.badRequest("totalRoomPrice phải là số");
+		}
+		if (update.totalUtilitiesPrice != null && typeof update.totalUtilitiesPrice !== "number") {
+			throw AppError.badRequest("totalUtilitiesPrice phải là số");
+		}
+
+		const toUpdate: any = { ...update };
+		if (toUpdate.createdAt) toUpdate.createdAt = new Date(toUpdate.createdAt as any);
+
+		const bill = await db.updateBillById(id, toUpdate);
+		if (!bill) throw AppError.notFound("Bill not found");
+		return bill;
+	}
+
+	async deleteBill(id: string) {
+		if (!id) throw AppError.badRequest("Id is required");
+		const bill = await db.deleteBillById(id);
+		if (!bill) throw AppError.notFound("Bill not found");
+		return bill;
+	}
+
+	async listBills(query: { page?: number; pageSize?: number; hotelId?: string; roomId?: string; from?: string; to?: string }) {
+		const { data, total } = await db.listBills(query);
+		return { data, total };
 	}
 }
