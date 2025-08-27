@@ -21,7 +21,7 @@ export class Database {
     }
 
     try {
-      const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/hvh_hotel';
+      const mongoUri = process.env.MONGODB_URI || 'mongodb+srv://22130084:linhhoai123@cluster0.n3whcnj.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
       
       await mongoose.connect(mongoUri, {
         maxPoolSize: 10,

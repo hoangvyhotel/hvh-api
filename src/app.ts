@@ -157,8 +157,8 @@ class App {
       // Connect to database
       await database.connect();
 
-      // Start server
-      this.app.listen(this.port, () => {
+      // Start server and attach error handler (e.g., port already in use)
+      const server = this.app.listen(this.port, () => {
         logger.info(`🚀 Server is running on port ${this.port}`);
         logger.info(`📊 Environment: ${process.env.NODE_ENV}`);
         logger.info(`🔗 Health check: http://localhost:${this.port}/health`);
@@ -167,6 +167,16 @@ class App {
             process.env.API_VERSION || "v1"
           }`
         );
+      });
+
+      server.on("error", (err: any) => {
+        if (err && err.code === "EADDRINUSE") {
+          logger.error(`Port ${this.port} is already in use. Please free the port or change PORT env.`);
+          // exit so process manager / nodemon can restart or show clearer message
+          process.exit(1);
+        }
+        logger.error("Server error:", err);
+        process.exit(1);
       });
 
       // Graceful shutdown
