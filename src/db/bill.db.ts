@@ -29,6 +29,19 @@ export async function getBillsForMonth(month: number, year?: number, hotelId?: s
 		const roomIds = rooms.map((r: any) => r._id).filter(Boolean);
 		if (roomIds.length === 0) return [];
 		pipeline.push({ $match: { roomId: { $in: roomIds } } });
+		// join Room to access room.hotelId
+		pipeline.push(
+			{
+				$lookup: {
+					from: "rooms",
+					localField: "roomId",
+					foreignField: "_id",
+					as: "room",
+				},
+			},
+			{ $unwind: "$room" },
+			{ $match: { "room.hotelId": new Types.ObjectId(hotelId) } }
+		);
 	}
 
 	pipeline.push({ $sort: { createdAt: -1 } });
