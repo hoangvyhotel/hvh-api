@@ -1,10 +1,14 @@
+import { TYPE_BOOKINGS } from "@/constant/constant";
 import { BaseResponse } from "./base";
 
 export interface GetRoomsByHotel {
   HotelId: string;
   RoomName: string;
   Status: string;
-  TypeBooking?: "Day" | "Hours" | "Night";
+  TypeBooking?:
+    | typeof TYPE_BOOKINGS.DAY
+    | typeof TYPE_BOOKINGS.HOUR
+    | typeof TYPE_BOOKINGS.NIGHT;
   Utilities?: UtilitiesForBooking[];
   Description?: string;
   Floor: number;
@@ -20,23 +24,40 @@ export interface GetBookingInfo {
   BookingId: string;
   RoomName: string;
   TypeBooking: string;
+  CheckinDate: Date;
   Surcharge?: Surcharge[];
-  Notes?: Note[];
+  Notes?: Note;
   Utilities?: UtilitiesForBooking[];
   Documents?: Document[];
   CarInfos?: CarInfo[];
   BookingPricing: BookingPricing[];
 }
 
+export interface PricingHistoryType {
+  action:
+    | "CREATE"
+    | "CHANGE_TYPE"
+    | "DISCOUNT"
+    | "PREPAID"
+    | "NEGOTIATE"
+    | "SURCHARGE";
+  priceType?: string;
+  amount?: number;
+  description?: string;
+  appliedFrom: string;
+  appliedTo?: string;
+  appliedFirstHourPrice?: number;
+  appliedNextHourPrice?: number;
+  appliedDayPrice?: number;
+  appliedNightPrice?: number;
+}
+
 export interface BookingPricing {
   PriceType: string;
   StartDate: string;
   EndDate?: string;
-  AppliedFirstHourPrice?: number;
-  AppliedNextHourPrice?: number;
-  AppliedDayPrice?: number;
-  AppliedNightPrice?: number;
   CalculatedAmount?: number;
+  History: PricingHistoryType[];
 }
 export interface Document {
   ID: string;
@@ -53,14 +74,16 @@ export interface CarInfo {
 }
 export interface Surcharge {
   Content?: string;
-  Amout?: number;
+  Amount?: number;
+  BookingId?: string;
 }
 
 export interface Note {
   Content?: string;
   Discount?: number;
   PayInAdvance?: number;
-  NegotiatedPrice?: Number;
+  NegotiatedPrice?: number;
+  BookingPricingId?: string;
 }
 
 export type GetRoomsByHotelResponse = BaseResponse<GetRoomsByHotel[]>;

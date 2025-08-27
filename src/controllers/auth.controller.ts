@@ -110,7 +110,7 @@ export const register = catchAsyncErrorWithCode(
       .json(
         ResponseHelper.success(
           result,
-          "User registered successfully",
+          "Tạo mới người dùng thành công",
           "REGISTER_SUCCESS"
         )
       );
