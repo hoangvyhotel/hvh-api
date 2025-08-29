@@ -66,13 +66,16 @@ export const login = catchAsyncErrorWithCode(
     const result = await authService.login(req);
 
     // Only return user info on successful login. Tokens are not sent here.
-    const { user } = result as any;
+      const { user } = result as any;
 
-    res
-      .status(200)
-      .json(
-        ResponseHelper.success({ user }, "Login successful", "LOGIN_SUCCESS")
-      );
+      // return only username, role, hotelId as requested
+      const payload = {
+        username: user.userName,
+        role: user.role,
+        hotelId: user.hotelId,
+      };
+
+      res.status(200).json(ResponseHelper.success({ user: payload }, "Login successful", "LOGIN_SUCCESS"));
   },
   "LOGIN_ERROR"
 );
@@ -84,16 +87,13 @@ export const loginWithAdmin = catchAsyncErrorWithCode(
   async (req: AdminLoginRequest, res: Response) => {
     const result = await authService.loginWithAdmin(req);
     const { user } = result as any;
+      const payload = {
+        username: user.userName,
+        role: user.role,
+        hotelId: user.hotelId,
+      };
 
-    res
-      .status(200)
-      .json(
-        ResponseHelper.success(
-          { user },
-          "Admin login successful",
-          "LOGIN_SUCCESS"
-        )
-      );
+      res.status(200).json(ResponseHelper.success({ user: payload }, "Admin login successful", "LOGIN_SUCCESS"));
   },
   "LOGIN_ADMIN_ERROR"
 );
