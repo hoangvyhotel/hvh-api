@@ -42,7 +42,7 @@ export async function saveRoom(room: IRoom): Promise<IRoomDocument> {
 
 export async function updateRoomById(id: string, roomData: IRoomDocument) {
   const updatedRoom = await roomData.save();
-  return updatedRoom;
+  return findRoomById(updatedRoom._id.toString());
 }
 
 export async function updateRoomStatus(id: string, status: boolean) {
