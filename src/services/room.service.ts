@@ -34,7 +34,8 @@ export async function updateRoom(id: string, roomData: UpdateRoomRequest) {
   }
 
   Object.assign(room, roomData);
-  return roomDb.updateRoomById(id, room);
+  await roomDb.updateRoomById(id, room);
+  return getRoomById(id);
 }
 
 export async function updateStatus(id: string, status: boolean) {
@@ -47,7 +48,7 @@ export async function updateStatus(id: string, status: boolean) {
     throw AppError.notFound("Không tìm thấy phòng với ID đã cho");
   }
 
-  return await roomDb.updateRoomStatus(id, status);
+  await roomDb.updateRoomStatus(id, status);
 }
 
 export async function softDeleteRoom(id: string) {
