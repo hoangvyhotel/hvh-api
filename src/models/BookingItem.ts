@@ -8,17 +8,13 @@ export interface IBookingItem extends Document {
   updatedAt?: Date;
 }
 
-const BookingItemSchema = new Schema<IBookingItem>(
+export const BookingItemSchema = new Schema<IBookingItem>(
   {
-    bookingId: {
-      type: Schema.Types.ObjectId,
-      ref: "Booking",
-      required: true,
-      index: true,
-    },
+    bookingId: { type: Schema.Types.ObjectId, ref: "Booking", required: true },
     utilitiesId: { type: Schema.Types.ObjectId, ref: "Utility" },
     quantity: { type: Number, required: true, min: 1 },
   },
+
   { timestamps: true }
 );
 
