@@ -63,5 +63,15 @@ export interface Note {
   NegotiatedPrice?: Number;
 }
 
+export interface BookingItemResponse {
+  roomName: string;
+  checkin: Date;
+  checkout?: Date;
+  utilitiesPrice: number;
+  roomPrice: number;
+  isCheckout: boolean;
+}
+
 export type GetRoomsByHotelResponse = BaseResponse<GetRoomsByHotel[]>;
 export type GetBookingInFoResponse = BaseResponse<GetBookingInfo>;
+export type BookingItemResponses = BaseResponse<BookingItemResponse[]>;

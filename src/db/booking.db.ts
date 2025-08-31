@@ -107,9 +107,8 @@ export const getRoomsByHotel = async (
   return data;
 };
 
-export const getBookings = async (): Promise<BaseResponse<IBooking[]>> => {
-  const bookings = await Booking.find({});
-  return ResponseHelper.success(bookings);
+export const getBookings = async (): Promise<IBooking[]> => {
+  return await Booking.find({}).populate("roomId").exec();
 };
 
 export const AddBooking = async (
@@ -145,7 +144,7 @@ export const getBookingInfo = async (
   // 1. Lấy booking hiện tại dựa trên roomId
   console.log("roomId", roomId);
   const booking = await Booking.findOne({
-    roomId: new Types.ObjectId(roomId)
+    roomId: new Types.ObjectId(roomId),
   })
     .lean()
     .select("+documentInfo +carInfo +surcharge +note");

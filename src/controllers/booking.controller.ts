@@ -4,6 +4,8 @@ import {
   ParamsRequest,
 } from "@/types/request/base";
 import {
+  BookingItemResponse,
+  BookingItemResponses,
   GetBookingInFoResponse,
   GetRoomsByHotelResponse,
 } from "@/types/response/booking";
@@ -43,4 +45,20 @@ export const addBooking = catchAsyncErrorWithCode(
     res.status(200).json(result);
   },
   "ADD_ERROR"
+);
+
+export const getBookings = catchAsyncErrorWithCode(
+  async (req: any, res: Response<BaseResponse<any>>) => {
+    const result = await bookingService.getBookings();
+    res.status(200).json(result);
+  },
+  "FETCH_ERROR"
+);
+
+export const getRentalBookings = catchAsyncErrorWithCode(
+  async (req: any, res: Response<BookingItemResponses>) => {
+    const result = await bookingService.getRentalBookings();
+    res.status(200).json(result);
+  },
+  "FETCH_ERROR"
 );

@@ -1,6 +1,8 @@
 import mongoose, { Document, Schema } from "mongoose";
+import { BookingItemSchema, IBookingItem } from "./BookingItem";
 
 export interface IBooking extends Document {
+  _id: Schema.Types.ObjectId;
   roomId: Schema.Types.ObjectId;
   checkin: Date;
   checkout?: Date;
@@ -10,6 +12,7 @@ export interface IBooking extends Document {
   note?: Record<string, any>[];
   createdAt?: Date;
   updatedAt?: Date;
+  items: IBookingItem[];
 }
 
 const BookingSchema = new Schema<IBooking>(
@@ -56,6 +59,10 @@ const BookingSchema = new Schema<IBooking>(
           required: false,
         },
       ],
+      default: [],
+    },
+    items: {
+      type: [BookingItemSchema],
       default: [],
     },
   },
