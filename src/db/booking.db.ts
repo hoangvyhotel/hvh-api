@@ -120,9 +120,8 @@ export const getRoomsByHotel = async (
   return data;
 };
 
-export const getBookings = async (): Promise<BaseResponse<IBooking[]>> => {
-  const bookings = await Booking.find({});
-  return ResponseHelper.success(bookings);
+export const getBookings = async (): Promise<IBooking[]> => {
+  return await Booking.find({}).populate("roomId").exec();
 };
 
 export const AddBooking = async (
@@ -155,6 +154,7 @@ export const getBookingInfo = async (
   const { roomId } = req.params;
   const roomObjectId = new Types.ObjectId(roomId);
 
+<<<<<<< HEAD
   const pipeline = [
     { $match: { roomId: roomObjectId } },
     {
@@ -247,6 +247,15 @@ export const getBookingInfo = async (
       },
     },
   ];
+=======
+  // 1. Lấy booking hiện tại dựa trên roomId
+  console.log("roomId", roomId);
+  const booking = await Booking.findOne({
+    roomId: new Types.ObjectId(roomId),
+  })
+    .lean()
+    .select("+documentInfo +carInfo +surcharge +note");
+>>>>>>> 6efe901 (feat(getBookings): get bookings which has booked by guest)
 
   const result = await Booking.aggregate(pipeline).exec();
   if (!result || result.length === 0) {

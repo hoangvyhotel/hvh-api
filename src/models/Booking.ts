@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import mongoose, { Document, Schema, Types } from "mongoose";
 import { Note } from "@/types/response/booking";
 export interface IBookingItem {
@@ -19,6 +20,14 @@ const NoteSchema = new Schema<Note>(
 export interface IBooking extends Document {
   _id: Types.ObjectId;
   roomId: Types.ObjectId;
+=======
+import mongoose, { Document, Schema } from "mongoose";
+import { BookingItemSchema, IBookingItem } from "./BookingItem";
+
+export interface IBooking extends Document {
+  _id: Schema.Types.ObjectId;
+  roomId: Schema.Types.ObjectId;
+>>>>>>> 6efe901 (feat(getBookings): get bookings which has booked by guest)
   checkin: Date;
   checkout?: Date;
   documentInfo?: Record<string, any>[];
@@ -90,7 +99,23 @@ const BookingSchema = new Schema<IBooking>(
       ],
       default: [],
     },
+<<<<<<< HEAD
     note: { type: NoteSchema, required: false },
+=======
+    note: {
+      type: [
+        {
+          type: Schema.Types.Mixed,
+          required: false,
+        },
+      ],
+      default: [],
+    },
+    items: {
+      type: [BookingItemSchema],
+      default: [],
+    },
+>>>>>>> 6efe901 (feat(getBookings): get bookings which has booked by guest)
   },
   { timestamps: true }
 );
