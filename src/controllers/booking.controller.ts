@@ -118,7 +118,6 @@ export const removeBooking = catchAsyncErrorWithCode(
   "DELETE_ERROR"
 );
 
-
 export const moveRoom = catchAsyncErrorWithCode(
   async (
     req: BodyRequest<{ bookingId: string; newRoomId: string }>,
@@ -128,4 +127,18 @@ export const moveRoom = catchAsyncErrorWithCode(
     res.status(201).json(result);
   },
   "MOVE_ERROR"
+);
+
+export const changeTypeBooking = catchAsyncErrorWithCode(
+  async (
+    req: BodyRequest<{
+      bookingId: string;
+      newPriceType: "HOUR" | "DAY" | "NIGHT";
+    }>,
+    res: Response<BaseResponse<null>>
+  ) => {
+    const result = await bookingService.changeTypeBooking(req);
+    res.status(201).json(result);
+  },
+  "CHANGE_ERROR"
 );

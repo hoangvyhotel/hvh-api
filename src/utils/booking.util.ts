@@ -1,14 +1,18 @@
-import { findRoomById } from "@/db/room.db";
+import { ClientSession } from "mongoose";
 import Booking from "@/models/Booking";
-import BookingPricing, { PricingHistory } from "@/models/BookingPricing";
+import BookingPricing from "@/models/BookingPricing";
 import { PricingHistoryType } from "@/types/response/booking";
+import { findRoomById } from "@/db/room.db";
 
 export const calculateAndUpdatePricing = async (
   bookingPricingId: string,
   historyId: string,
-  roomId: string
+  roomId: string,
+  options: { session?: ClientSession } = {}
 ) => {
-  const bookingPricing = await BookingPricing.findById(bookingPricingId);
+  const bookingPricing = await BookingPricing.findById(
+    bookingPricingId
+  ).session(options.session ?? null);
   if (!bookingPricing) throw new Error("BookingPricing not found");
 
   // Tìm history record cụ thể bằng _id
@@ -41,16 +45,27 @@ export const calculateAndUpdatePricing = async (
       result = await updateSpecificHourHistory(
         bookingPricingId,
         historyId,
-        roomId
+        roomId,
+        options
       );
       break;
 
     case "NIGHT":
-      result = await cacutaleNightAndUpdate(bookingPricingId, history, roomId);
+      result = await cacutaleNightAndUpdate(
+        bookingPricingId,
+        history,
+        roomId,
+        options
+      );
       break;
 
     case "DAY":
-      result = await cacutaleDayAndUpdate(bookingPricingId, history, roomId);
+      result = await cacutaleDayAndUpdate(
+        bookingPricingId,
+        history,
+        roomId,
+        options
+      );
       break;
 
     default:
@@ -59,6 +74,7 @@ export const calculateAndUpdatePricing = async (
 
   return result;
 };
+
 const cacutaleTime = (appliedFrom: string, appliedTo?: string): number => {
   if (!appliedFrom) return 0;
 
@@ -111,31 +127,41 @@ export const cacutaleHour = (
 export const cacutaleNightAndUpdate = async (
   bookingPricingId: string,
   history: PricingHistoryType,
-  roomId: string
+  roomId: string,
+  options: { session?: ClientSession } = {}
 ) => {
   const from = new Date(history.appliedFrom);
   const now = history.appliedTo ? new Date(history.appliedTo) : new Date();
 
-  // mốc 12h trưa ngày hôm sau
-  const noonNextDay = new Date(from);
-  noonNextDay.setDate(noonNextDay.getDate() + 1);
-  noonNextDay.setHours(12, 0, 0, 0);
+  // Xác định mốc 12h trưa kế tiếp sau giờ check-in
+  const noonThreshold = new Date(from);
+  noonThreshold.setHours(12, 0, 0, 0);
 
-  if (now < noonNextDay) {
+  // Nếu check-in sau 12h trưa thì mốc chuẩn là 12h trưa hôm sau
+  if (from.getHours() >= 12) {
+    noonThreshold.setDate(noonThreshold.getDate() + 1);
+  }
+
+  // So sánh với thời điểm hiện tại
+  if (now < noonThreshold) {
     history.amount = history.appliedNightPrice || 0;
     return { closedNight: history };
   }
 
-  const room = await findRoomById(roomId);
+  const room = await findRoomById(roomId, options);
   if (!room) throw new Error("Room not found");
 
-  const bookingPricing = await BookingPricing.findById(bookingPricingId);
-  const booking = await Booking.findById(bookingPricing?.bookingId);
+  const bookingPricing = await BookingPricing.findById(
+    bookingPricingId
+  ).session(options.session ?? null);
+  const booking = await Booking.findById(bookingPricing?.bookingId).session(
+    options.session ?? null
+  );
   if (!bookingPricing || !booking) throw new Error("BookingPricing not found");
 
   // đóng record Night
   const lastHistory = bookingPricing.history[bookingPricing.history.length - 1];
-  lastHistory.appliedTo = noonNextDay;
+  lastHistory.appliedTo = noonThreshold;
   lastHistory.amount = room.nightPrice;
   lastHistory.appliedNightPrice = room.nightPrice;
 
@@ -144,7 +170,7 @@ export const cacutaleNightAndUpdate = async (
     action: "CHANGE_TYPE",
     priceType: "HOUR",
     amount: 0, // sẽ update ngay bằng cacutaleHour
-    appliedFrom: noonNextDay.toISOString(),
+    appliedFrom: noonThreshold.toISOString(),
     appliedFirstHourPrice: room.originalPrice,
   };
 
@@ -157,7 +183,7 @@ export const cacutaleNightAndUpdate = async (
   bookingPricing.history.push(nextHourHistory as any);
 
   bookingPricing.priceType = "HOUR";
-  bookingPricing.startTime = noonNextDay;
+  bookingPricing.startTime = noonThreshold;
 
   if (!booking.note?.NegotiatedPrice || booking.note?.NegotiatedPrice <= 0) {
     bookingPricing.calculatedAmount =
@@ -165,8 +191,8 @@ export const cacutaleNightAndUpdate = async (
       (nextHourHistory.amount ?? room.originalPrice);
   }
   room.typeHire = 1;
-  await room.save();
-  await bookingPricing.save();
+  await room.save({ session: options.session ?? null });
+  await bookingPricing.save({ session: options.session ?? null });
 
   return { closedNight: history, nextHourHistory };
 };
@@ -174,7 +200,8 @@ export const cacutaleNightAndUpdate = async (
 export const cacutaleDayAndUpdate = async (
   bookingPricingId: string,
   history: PricingHistoryType,
-  roomId: string
+  roomId: string,
+  options: { session?: ClientSession } = {}
 ) => {
   const from = new Date(history.appliedFrom);
   const now = history.appliedTo ? new Date(history.appliedTo) : new Date();
@@ -191,18 +218,22 @@ export const cacutaleDayAndUpdate = async (
   }
 
   // ✅ đã qua 24h => cần truy vấn room & bookingPricing để update
-  const room = await findRoomById(roomId);
+  const room = await findRoomById(roomId, options);
   if (!room) throw new Error("Room not found");
 
-  const bookingPricing = await BookingPricing.findById(bookingPricingId);
-  const booking = await Booking.findById(bookingPricing?.bookingId);
+  const bookingPricing = await BookingPricing.findById(
+    bookingPricingId
+  ).session(options.session ?? null);
+  const booking = await Booking.findById(bookingPricing?.bookingId).session(
+    options.session ?? null
+  );
 
   if (!bookingPricing || !booking) throw new Error("BookingPricing not found");
 
   const lastHistory = bookingPricing.history[bookingPricing.history.length - 1];
   lastHistory.appliedTo = nextDay;
   lastHistory.amount = room.dayPrice;
-  lastHistory.appliedNightPrice = room.dayPrice;
+  lastHistory.appliedDayPrice = room.dayPrice;
 
   // tạo record HOUR mới (Amount ban đầu = 0, sẽ tính dần bằng cacutaleHour)
   let nextHourHistory: PricingHistoryType = {
@@ -231,8 +262,8 @@ export const cacutaleDayAndUpdate = async (
       (nextHourHistory.amount ?? room.originalPrice);
   }
   room.typeHire = 1;
-  await room.save();
-  await bookingPricing.save();
+  await room.save({ session: options.session ?? null });
+  await bookingPricing.save({ session: options.session ?? null });
 
   return { closedDay: history, nextHourHistory };
 };
@@ -240,13 +271,18 @@ export const cacutaleDayAndUpdate = async (
 export const updateSpecificHourHistory = async (
   bookingPricingId: string,
   historyId: string,
-  roomId: string
+  roomId: string,
+  options: { session?: ClientSession } = {}
 ) => {
-  const room = await findRoomById(roomId);
+  const room = await findRoomById(roomId, options);
   if (!room) throw new Error("Room not found");
 
-  const bookingPricing = await BookingPricing.findById(bookingPricingId);
-  const booking = await Booking.findById(bookingPricing?.bookingId);
+  const bookingPricing = await BookingPricing.findById(
+    bookingPricingId
+  ).session(options.session ?? null);
+  const booking = await Booking.findById(bookingPricing?.bookingId).session(
+    options.session ?? null
+  );
 
   if (!bookingPricing || !booking) throw new Error("BookingPricing not found");
 
@@ -301,7 +337,7 @@ export const updateSpecificHourHistory = async (
       (bookingPricing.calculatedAmount || 0) + amountDifference;
   }
 
-  await bookingPricing.save();
+  await bookingPricing.save({ session: options.session ?? null });
 
   return {
     updated: true,
