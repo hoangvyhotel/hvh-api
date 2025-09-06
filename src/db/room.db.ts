@@ -2,12 +2,13 @@ import { IRoom, IRoomDocument, RoomModel } from "@/models/Room";
 import { UpdatePrice } from "@/types/request/room/UpdateRangePriceRequest.type";
 import { RoomAvailable, RoomResponse } from "@/types/response/roomResponse";
 import { AppError } from "@/utils/AppError";
-import mongoose, { Types } from "mongoose";
+import mongoose, { ClientSession, Types } from "mongoose";
 
-export async function findRoomById(id: string) {
-  const room = await RoomModel.findById(id);
+export async function findRoomById(id: string, options: { session?: ClientSession } = {}) {
+  const room = await RoomModel.findById(id).session(options.session ?? null);
   return room;
 }
+
 
 export const getRoomsByHotelId = async (
   hotelId: string,

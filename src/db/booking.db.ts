@@ -1,7 +1,6 @@
 import mongoose, { Types } from "mongoose";
 import { RoomModel, IRoomDocument } from "@/models/Room";
 import Booking, { IBooking } from "@/models/Booking";
-import BookingItem from "@/models/BookingItem";
 import { IUtility } from "@/models/Utility";
 import { ParamsRequest } from "@/types/request/base";
 import { BaseResponse } from "@/types/response";
@@ -15,7 +14,6 @@ import BookingPricing, {
 import { PricingHistoryData } from "@/types/response/bookingPricing";
 import { TYPE_BOOKINGS } from "@/constant/constant";
 import { calculateAndUpdatePricing } from "@/utils/booking.util";
-import { findRoomById } from "./room.db";
 
 type UtilitiesForBooking = {
   Quantity: number;
@@ -811,6 +809,223 @@ export const moveRoom = async (bookingId: string, newRoomId: string) => {
           );
         }
         continue; // Retry the transaction
+      }
+      throw error;
+    } finally {
+      session.endSession();
+    }
+  }
+
+  throw AppError.database("Failed to execute transaction after retries");
+};
+
+export const changePriceType = async (
+  bookingId: string,
+  newPriceType: "HOUR" | "DAY" | "NIGHT"
+) => {
+  let retries = 0;
+
+  while (retries < MAX_RETRIES) {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      // 1. Validate Booking and BookingPricing
+      const booking = await Booking.findById(bookingId).session(session);
+      if (!booking) {
+        throw AppError.notFound("Không tìm thấy booking");
+      }
+
+      const bookingPricing = await BookingPricing.findOne({
+        bookingId,
+      }).session(session);
+      if (!bookingPricing) {
+        throw AppError.notFound("Không tìm thấy thông tin giá cho booking");
+      }
+
+      const typedBookingPricing = bookingPricing as BookingPricingDocument;
+      const room = await RoomModel.findById(booking.roomId).session(session);
+      if (!room) {
+        throw AppError.notFound("Không tìm thấy phòng");
+      }
+
+      const currentTime = new Date();
+      const noonToday = new Date(currentTime);
+      noonToday.setHours(12, 0, 0, 0);
+
+      // 2. Handle Price Type Change
+      const latestHistory = typedBookingPricing.history
+        .filter((h) => !h.appliedTo)
+        .sort((a, b) => b.appliedFrom.getTime() - a.appliedFrom.getTime())[0];
+
+      if (!latestHistory) {
+        throw AppError.badRequest("Không tìm thấy lịch sử giá hiện tại");
+      }
+
+      // 3. Update amount for current history before changing type
+      if (latestHistory._id) {
+        await calculateAndUpdatePricing(
+          typedBookingPricing._id.toString(),
+          latestHistory._id.toString(),
+          room._id.toString(),
+          { session }
+        );
+      }
+
+      const bookingPricingUpdated = await BookingPricing.findOne({
+        bookingId,
+      }).session(session);
+
+      const typedBookingPricingUpdated =
+        bookingPricingUpdated as BookingPricingDocument;
+
+      const latestHistoryUpdated = typedBookingPricingUpdated.history
+        .filter((h) => !h.appliedTo)
+        .sort((a, b) => b.appliedFrom.getTime() - a.appliedFrom.getTime())[0];
+
+      const typeHireMap: { [key: string]: number } = {
+        HOUR: 1,
+        NIGHT: 2,
+        DAY: 3,
+      };
+
+      // 4. Process based on current and new price type
+      if (latestHistoryUpdated.priceType === "HOUR" && newPriceType === "DAY") {
+        // Close current hour history
+        latestHistoryUpdated.appliedTo = currentTime; 
+        // Create new day history
+        const newHistory: PricingHistory = {
+          action: "CHANGE_TYPE",
+          priceType: "DAY",
+          amount: room.dayPrice || 0,
+          appliedFrom: currentTime,
+          appliedDayPrice: room.dayPrice,
+        };
+        typedBookingPricingUpdated.history.push(newHistory);
+        room.typeHire = typeHireMap[newPriceType];
+      } else if (
+        latestHistoryUpdated.priceType === "HOUR" &&
+        newPriceType === "NIGHT"
+      ) {
+        // Close current hour history
+        latestHistoryUpdated.appliedTo = currentTime;
+
+        // Create new night history
+        const newHistory: PricingHistory = {
+          action: "CHANGE_TYPE",
+          priceType: "NIGHT",
+          amount: room.nightPrice || 0,
+          appliedFrom: currentTime,
+          appliedNightPrice: room.nightPrice,
+        };
+        typedBookingPricingUpdated.history.push(newHistory);
+        room.typeHire = typeHireMap[newPriceType];
+      } else if (
+        latestHistoryUpdated.priceType === "NIGHT" &&
+        newPriceType === "DAY"
+      ) {
+        // Update night to day
+        latestHistoryUpdated.priceType = "DAY";
+        latestHistoryUpdated.appliedNightPrice = 0;
+        latestHistoryUpdated.appliedDayPrice = room.dayPrice;
+        latestHistoryUpdated.amount = room.dayPrice || 0;
+        room.typeHire = typeHireMap[newPriceType];
+      } else if (
+        latestHistoryUpdated.priceType === "NIGHT" &&
+        newPriceType === "HOUR"
+      ) {
+        // Update night to hour
+        latestHistoryUpdated.priceType = "HOUR";
+        latestHistoryUpdated.appliedNightPrice = 0;
+        latestHistoryUpdated.appliedFirstHourPrice = room.originalPrice;
+        latestHistoryUpdated.appliedNextHourPrice = room.afterHoursPrice;
+        room.typeHire = typeHireMap[newPriceType];
+      } else if (
+        latestHistoryUpdated.priceType === "DAY" &&
+        newPriceType === "HOUR"
+      ) {
+        latestHistoryUpdated.priceType = "HOUR";
+        latestHistoryUpdated.appliedDayPrice = 0;
+        latestHistoryUpdated.appliedFirstHourPrice = room.originalPrice;
+        latestHistoryUpdated.appliedNextHourPrice = room.afterHoursPrice;
+        room.typeHire = typeHireMap[newPriceType];
+      } else if (
+        latestHistoryUpdated.priceType === "DAY" &&
+        newPriceType === "NIGHT"
+      ) {
+        latestHistoryUpdated.priceType = "NIGHT";
+        latestHistoryUpdated.appliedDayPrice = 0;
+        latestHistoryUpdated.appliedNightPrice = room.nightPrice;
+        room.typeHire = typeHireMap[newPriceType];
+      } else {
+        throw AppError.badRequest(
+          "Loại giá không hợp lệ hoặc không cần thay đổi"
+        );
+      }
+
+      // 5. Update amount for new history if needed (for HOUR type)
+      const newHistory =
+        typedBookingPricingUpdated.history[
+          typedBookingPricingUpdated.history.length - 1
+        ];
+
+      // 6. Recalculate Total Amount
+      const totalHistory = typedBookingPricingUpdated.history.reduce(
+        (sum, h) => sum + (h.amount || 0),
+        0
+      );
+      const totalSurcharge =
+        booking.surcharge?.reduce((sum, s) => sum + (s.Amount || 0), 0) || 0;
+      const totalUtility =
+        booking.items?.reduce(
+          (sum, u) => sum + (u.price || 0) * (u.quantity || 1),
+          0
+        ) || 0;
+      let calculated = totalHistory + totalSurcharge + totalUtility;
+
+      // Apply Discount and PayInAdvance
+      if (booking.note?.Discount && booking.note.Discount > 0) {
+        calculated -= booking.note.Discount;
+      }
+      if (booking.note?.PayInAdvance && booking.note.PayInAdvance > 0) {
+        calculated -= booking.note.PayInAdvance;
+      }
+      if (booking.note?.NegotiatedPrice && booking.note.NegotiatedPrice > 0) {
+        calculated = booking.note.NegotiatedPrice;
+      }
+
+      typedBookingPricingUpdated.calculatedAmount = Math.max(0, calculated);
+      typedBookingPricingUpdated.priceType = newPriceType;
+
+      // 7. Save All Changes
+      await room.save({ session });
+      await booking.save({ session });
+      await typedBookingPricingUpdated.save({ session });
+
+      // 8. Re-fetch BookingPricing to ensure updated data
+      const updatedBookingPricing = await BookingPricing.findOne({
+        bookingId,
+      }).session(session);
+      if (!updatedBookingPricing) {
+        throw AppError.notFound(
+          "Không tìm thấy thông tin giá sau khi cập nhật"
+        );
+      }
+
+      // 9. Commit Transaction
+      await session.commitTransaction();
+      return { booking, bookingPricing: updatedBookingPricing, room };
+    } catch (error: any) {
+      await session.abortTransaction();
+      if (error.name === "MongoServerError" && error.code === 112) {
+        retries++;
+        if (retries >= MAX_RETRIES) {
+          throw AppError.database(
+            "Write conflict occurred after maximum retries",
+            error
+          );
+        }
+        continue;
       }
       throw error;
     } finally {

@@ -92,40 +92,13 @@ export const addBooking = async (
 
 export const changeTypeBooking = async (
   req: BodyRequest<{
-    bookingPincingId: string;
-    currentType: string;
-    newType: string;
+    bookingId: string;
+    newPriceType: "HOUR" | "DAY" | "NIGHT";
   }>
-) => {
-  const { bookingPincingId, currentType, newType } = req.body;
-  const existingBookingPricing = await bookingPrincingDb.getBookingPrincing(
-    bookingPincingId
-  );
-  const now = new Date();
-
-  let calculatedAmountCurrent = 0;
-  if (currentType === "HOUR") {
-    const hoursUsed = Math.ceil(
-      (now.getTime() - existingBookingPricing.startTime.getTime()) /
-        (1000 * 60 * 60)
-    );
-    calculatedAmountCurrent =
-      existingBookingPricing.appliedFirstHourPrice +
-      (hoursUsed - 1) * existingBookingPricing.appliedNextHourPrice;
-  } else if (currentType === "NIGHT") {
-    const nightsUsed = Math.ceil(
-      (now.getTime() - existingBookingPricing.startTime.getTime()) /
-        (1000 * 60 * 60 * 24)
-    );
-    calculatedAmountCurrent =
-      nightsUsed * existingBookingPricing.appliedNightPrice;
-  } else if (currentType === "DAY") {
-    const daysUsed = Math.ceil(
-      (now.getTime() - existingBookingPricing.startTime.getTime()) /
-        (1000 * 60 * 60 * 24)
-    );
-    calculatedAmountCurrent = daysUsed * existingBookingPricing.appliedDayPrice;
-  }
+): Promise<BaseResponse<null>> => {
+  const { bookingId, newPriceType } = req.body;
+  await bookingDb.changePriceType(bookingId, newPriceType);
+  return ResponseHelper.success(null, "Chuyển kiểu tính tiền thành công");
 };
 
 export const getBookingInfo = async (
@@ -252,5 +225,5 @@ export const moveRoom = async (
   }
 
   await bookingDb.moveRoom(bookingId, newRoomId);
-  return ResponseHelper.success(null,"Đổi phòng thành công");
+  return ResponseHelper.success(null, "Đổi phòng thành công");
 };
