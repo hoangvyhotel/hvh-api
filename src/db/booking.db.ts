@@ -7,17 +7,15 @@ import { ParamsRequest } from "@/types/request/base";
 import { BaseResponse } from "@/types/response";
 import { ResponseHelper } from "@/utils/response";
 import { AppError } from "@/utils/AppError";
-import {
-  CarInfo,
-  Document,
-  GetBookingInfo,
-  Note,
-  Surcharge,
-} from "@/types/response/booking";
-import BookingPricing from "@/models/BookingPricing";
+import { GetBookingInfo, Note, Surcharge } from "@/types/response/booking";
+import BookingPricing, {
+  BookingPricingDocument,
+  PricingHistory,
+} from "@/models/BookingPricing";
 import { PricingHistoryData } from "@/types/response/bookingPricing";
 import { TYPE_BOOKINGS } from "@/constant/constant";
 import { calculateAndUpdatePricing } from "@/utils/booking.util";
+import { findRoomById } from "./room.db";
 
 type UtilitiesForBooking = {
   Quantity: number;
@@ -302,6 +300,24 @@ export const getBookingInfo = async (
     );
   }
 
+  // Hàm tính số giờ và làm tròn đến 1 chữ số sau dấu phẩy
+  const calculateHours = (
+    start: string | Date,
+    end?: string | Date
+  ): number => {
+    if (!start) return 0;
+    const startDate = new Date(start);
+    // Nếu không có end, sử dụng thời điểm hiện tại
+    const endDate = end ? new Date(end) : new Date();
+    // Kiểm tra tính hợp lệ của ngày
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return 0;
+    const hours = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60);
+    return Math.round(hours * 10) / 10; // Làm tròn đến 1 chữ số sau dấu phẩy
+  };
+
+  // Tính tổng số giờ của booking từ CheckinDate đến thời điểm hiện tại
+  const totalHours = calculateHours(b.checkin, undefined);
+
   return {
     BookingId: b.BookingId,
     RoomName: b.RoomName,
@@ -314,6 +330,7 @@ export const getBookingInfo = async (
         ? TYPE_BOOKINGS.DAY
         : TYPE_BOOKINGS.HOUR,
     CheckinDate: b.checkin,
+    Times: totalHours,
     Utilities: b.Utilities ?? [],
     Documents: (b.documentInfo ?? []).map((doc: any) => ({
       ID: doc.ID || "",
@@ -339,7 +356,6 @@ export const getBookingInfo = async (
           NegotiatedPrice: b.note.NegotiatedPrice || 0,
         }
       : undefined,
-
     BookingPricing: (b.BookingPricing ?? []).map((bp: any) => ({
       PriceType: bp.priceType,
       StartDate: bp.startTime,
@@ -356,10 +372,12 @@ export const getBookingInfo = async (
         AppliedNextHourPrice: h.appliedNextHourPrice,
         AppliedDayPrice: h.appliedDayPrice,
         AppliedNightPrice: h.appliedNightPrice,
+        Times: calculateHours(h.appliedFrom, h.appliedTo),
       })),
     })),
   };
 };
+
 export const addSurcharge = async (surcharge: Surcharge) => {
   const booking = await Booking.findById(surcharge.BookingId);
   if (!booking) {
@@ -395,34 +413,62 @@ export const addSurcharge = async (surcharge: Surcharge) => {
 
 export const addNote = async (bookingId: string, note: Note) => {
   const booking = await Booking.findById(bookingId);
-  if (!booking) {
-    throw AppError.notFound("Không tìm thấy booking!");
-  }
+  if (!booking) throw AppError.notFound("Không tìm thấy booking!");
 
-  const bookingPricing = await BookingPricing.findOne({
-    bookingId: bookingId,
-  });
-  if (!bookingPricing) {
+  const bookingPricing = await BookingPricing.findOne({ bookingId });
+  if (!bookingPricing)
     throw AppError.notFound("Không tìm thấy thông tin giá cho booking!");
-  }
 
-  // Gán note vào booking (overwrite vì chỉ có 1 note duy nhất)
+  // Lưu ghi chú
   booking.note = note;
   await booking.save();
 
-  // Tính toán lại calculatedAmount
-  let calculated = bookingPricing.calculatedAmount || 0;
-  console.log("gia", calculated);
+  // --- CẬP NHẬT GIÁ LỊCH SỬ MỚI NHẤT ---
+  if (bookingPricing.history && bookingPricing.history.length > 0) {
+    const latestHistory =
+      bookingPricing.history[bookingPricing.history.length - 1];
+    if (latestHistory._id && bookingPricing._id) {
+      try {
+        // Gọi calculateAndUpdatePricing cho lịch sử mới nhất
+        await calculateAndUpdatePricing(
+          bookingPricing._id.toString(),
+          latestHistory._id.toString(),
+          booking.roomId?.toString() || "" // nếu cần roomId
+        );
+
+        // Reload bookingPricing sau khi cập nhật
+        const updated = await BookingPricing.findById(bookingPricing._id);
+        if (updated) Object.assign(bookingPricing, updated);
+      } catch (error) {
+        console.error(
+          `Lỗi khi cập nhật giá cho bookingPricingId: ${bookingPricing._id}, historyId: ${latestHistory._id}`,
+          error
+        );
+      }
+    }
+  }
+
+  // --- TÍNH LẠI TỔNG GỐC sau khi cập nhật lịch sử ---
+  const totalHistory =
+    bookingPricing.history?.reduce((sum, h) => sum + (h.amount || 0), 0) || 0;
+
+  const totalSurcharge =
+    booking.surcharge?.reduce((sum, s) => sum + (s.Amount || 0), 0) || 0;
+  const totalUtility =
+    booking.items?.reduce(
+      (sum, u) => sum + (u.price || 0) * (u.quantity || 1),
+      0
+    ) || 0;
+  let calculated = totalHistory + totalSurcharge + totalUtility;
+
+  // Trừ trả trước & giảm giá
+  if (note.Discount && note.Discount > 0) calculated -= note.Discount;
+  if (note.PayInAdvance && note.PayInAdvance > 0)
+    calculated -= note.PayInAdvance;
+
+  // Nếu có giá thương lượng > 0 thì dùng luôn
   if (note.NegotiatedPrice && note.NegotiatedPrice > 0) {
-    // Nếu có giá thương lượng thì dùng luôn
     calculated = note.NegotiatedPrice;
-  } else {
-    if (note.Discount && note.Discount > 0) {
-      calculated -= note.Discount;
-    }
-    if (note.PayInAdvance && note.PayInAdvance > 0) {
-      calculated -= note.PayInAdvance;
-    }
   }
 
   bookingPricing.calculatedAmount = Math.max(0, calculated); // tránh âm
@@ -467,10 +513,12 @@ export const addUtility = async (
   }
 
   await booking.save();
-
-  // Cập nhật tổng tiền
-  bookingPricing.calculatedAmount =
-    (bookingPricing.calculatedAmount || 0) + utility.price * quantity;
+  // Cập nhật tổng tiền nếu không có giá thỏa thuận
+  if (!booking.note?.NegotiatedPrice || booking.note.NegotiatedPrice <= 0) {
+    console.log("amount", utility.price);
+    bookingPricing.calculatedAmount =
+      (bookingPricing.calculatedAmount || 0) + utility.price * quantity;
+  }
 
   await bookingPricing.save();
 
@@ -544,4 +592,231 @@ export const deleteBooking = async (bookingId: string) => {
     success: true,
     message: "Xóa booking thành công và cập nhật phòng",
   };
+};
+
+export const getNote = async (bookingId: string): Promise<Note | null> => {
+  const booking = await Booking.findById(bookingId).select("note");
+  if (!booking) {
+    throw AppError.notFound("Không tìm thấy booking");
+  }
+
+  if (!booking.note) {
+    return null;
+  }
+
+  const note: Note = {
+    Content: booking.note.Content,
+    Discount: booking.note.Discount,
+    PayInAdvance: booking.note.PayInAdvance,
+    NegotiatedPrice: booking.note.NegotiatedPrice,
+    BookingId: bookingId,
+  };
+
+  return note;
+};
+
+const MAX_RETRIES = 3;
+
+// Hàm tính thời gian (tương tự cacutaleTime)
+const calculateTime = (appliedFrom: string, appliedTo?: string): number => {
+  if (!appliedFrom) return 0;
+
+  const from = new Date(appliedFrom);
+  const to = appliedTo ? new Date(appliedTo) : new Date();
+
+  const diffMs = to.getTime() - from.getTime();
+  const diffHours = diffMs / (1000 * 60 * 60);
+
+  return diffHours > 0 ? diffHours : 0;
+};
+
+// Hàm tính giá theo giờ (tương tự cacutaleHour)
+const calculateHour = (
+  historyPricing: PricingHistory,
+  originalPrice: number,
+  afterHoursPrice: number
+): PricingHistory => {
+  const hours = calculateTime(
+    historyPricing.appliedFrom.toISOString(),
+    historyPricing.appliedTo?.toISOString()
+  );
+
+  if (hours <= 0) {
+    return { ...historyPricing, amount: 0 };
+  }
+
+  const firstHourPrice = originalPrice;
+  const nextHourPrice = afterHoursPrice;
+  let amount = firstHourPrice;
+
+  if (hours > 1) {
+    const extraHours = hours - 1;
+    const roundedExtraHours = Math.floor(extraHours / 0.2) * 0.2;
+    amount += roundedExtraHours * nextHourPrice;
+  }
+
+  return {
+    ...historyPricing,
+    appliedFirstHourPrice: firstHourPrice,
+    appliedNextHourPrice: nextHourPrice,
+    amount: amount,
+  };
+};
+
+export const moveRoom = async (bookingId: string, newRoomId: string) => {
+  let retries = 0;
+
+  while (retries < MAX_RETRIES) {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      // 1. Validate Booking and Rooms
+      const booking = await Booking.findById(bookingId).session(session);
+      if (!booking) {
+        throw AppError.notFound("Không tìm thấy booking");
+      }
+
+      const oldRoom = await RoomModel.findById(booking.roomId).session(session);
+      if (!oldRoom) {
+        throw AppError.notFound("Không tìm thấy phòng hiện tại");
+      }
+
+      oldRoom.typeHire = 0;
+
+      const newRoom = await RoomModel.findById(newRoomId).session(session);
+      if (!newRoom) {
+        throw AppError.notFound("Không tìm thấy phòng cần đổi");
+      }
+
+      if (!newRoom.status) {
+        throw AppError.badRequest("Phòng cần đổi không khả dụng");
+      }
+
+      if (newRoomId === booking.roomId.toString()) {
+        throw AppError.badRequest("Phòng mới phải khác phòng hiện tại");
+      }
+
+      if (newRoom.hotelId.toString() !== oldRoom.hotelId.toString()) {
+        throw AppError.badRequest("Phòng mới phải thuộc cùng khách sạn");
+      }
+
+      const bookingPricing = await BookingPricing.findOne({
+        bookingId,
+      }).session(session);
+      if (!bookingPricing) {
+        throw AppError.notFound("Không tìm thấy thông tin giá cho booking");
+      }
+
+      const typedBookingPricing = bookingPricing as BookingPricingDocument;
+
+      const typeHireMap: { [key: string]: number } = {
+        HOUR: 1,
+        NIGHT: 2,
+        DAY: 3,
+      };
+      newRoom.typeHire = typeHireMap[typedBookingPricing.priceType] || 1;
+
+      // 3. Update Booking and BookingPricing
+      booking.roomId = newRoom._id;
+      typedBookingPricing.roomId = newRoom._id;
+
+      // 4. Recalculate Pricing for All History Records
+      const updatedHistory: PricingHistory[] = [];
+      for (const history of typedBookingPricing.history) {
+        if (!history._id) continue;
+
+        let updatedRecord: PricingHistory = { ...history };
+
+        switch (history.priceType) {
+          case "HOUR":
+            updatedRecord = calculateHour(
+              history,
+              newRoom.originalPrice,
+              newRoom.afterHoursPrice
+            );
+            break;
+
+          case "NIGHT": {
+            updatedRecord.amount = newRoom.nightPrice || 0;
+            updatedRecord.appliedNightPrice = newRoom.nightPrice;
+            break;
+          }
+
+          case "DAY":
+            {
+              updatedRecord.amount = newRoom.dayPrice || 0;
+              updatedRecord.appliedDayPrice = newRoom.dayPrice;
+            }
+            break;
+
+          default:
+            throw new Error(`Unsupported priceType: ${history.priceType}`);
+        }
+
+        updatedHistory.push(updatedRecord);
+      }
+
+      // Cập nhật toàn bộ history
+      typedBookingPricing.history = updatedHistory;
+
+      // 5. Calculate Total Amount
+      const totalHistory =
+        typedBookingPricing.history?.reduce(
+          (sum, h) => sum + (h.amount || 0),
+          0
+        ) || 0;
+
+      const totalSurcharge =
+        booking.surcharge?.reduce((sum, s) => sum + (s.Amount || 0), 0) || 0;
+      const totalUtility =
+        booking.items?.reduce(
+          (sum, u) => sum + (u.price || 0) * (u.quantity || 1),
+          0
+        ) || 0;
+      let calculated = totalHistory + totalSurcharge + totalUtility;
+
+      // Apply Discount and PayInAdvance
+      if (booking.note?.Discount && booking.note.Discount > 0) {
+        calculated -= booking.note.Discount;
+      }
+      if (booking.note?.PayInAdvance && booking.note.PayInAdvance > 0) {
+        calculated -= booking.note.PayInAdvance;
+      }
+
+      if (booking.note?.NegotiatedPrice && booking.note.NegotiatedPrice > 0) {
+        calculated = booking.note.NegotiatedPrice;
+      }
+
+      typedBookingPricing.calculatedAmount = Math.max(0, calculated);
+
+      // 7. Save All Changes
+      await oldRoom.save({ session });
+      await newRoom.save({ session });
+      await booking.save({ session });
+      await typedBookingPricing.save({ session });
+
+      // 8. Commit Transaction
+      await session.commitTransaction();
+      return { booking, bookingPricing: typedBookingPricing, oldRoom, newRoom };
+    } catch (error: any) {
+      await session.abortTransaction();
+      if (error.name === "MongoServerError" && error.code === 112) {
+        // WriteConflict
+        retries++;
+        if (retries >= MAX_RETRIES) {
+          throw AppError.database(
+            "Write conflict occurred after maximum retries",
+            error
+          );
+        }
+        continue; // Retry the transaction
+      }
+      throw error;
+    } finally {
+      session.endSession();
+    }
+  }
+
+  throw AppError.database("Failed to execute transaction after retries");
 };

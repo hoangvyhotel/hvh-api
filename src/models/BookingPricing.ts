@@ -9,7 +9,8 @@ export interface PricingHistory {
     | "DISCOUNT"
     | "PREPAID"
     | "NEGOTIATE"
-    | "SURCHARGE";
+    | "SURCHARGE"
+    | "CHANGE_ROOM";
   priceType?: string;
   amount?: number;
   description?: string;
@@ -32,6 +33,7 @@ const PricingHistorySchema = new Schema<PricingHistory>(
         "PREPAID",
         "NEGOTIATE",
         "SURCHARGE",
+        "CHANGE_ROOM", // Thêm CHANGE_ROOM vào enum
       ],
       required: true,
     },
@@ -44,8 +46,8 @@ const PricingHistorySchema = new Schema<PricingHistory>(
     appliedNextHourPrice: { type: Number, default: 0 },
     appliedDayPrice: { type: Number, default: 0 },
     appliedNightPrice: { type: Number, default: 0 },
-  }, 
-  { _id: true } // lưu được từng history record
+  },
+  { _id: true }
 );
 
 export interface IBookingPricing extends Document {
@@ -83,7 +85,7 @@ const BookingPricingSchema = new Schema<IBookingPricing>(
   { timestamps: true }
 );
 
-export type BookingPricingDocument = HydratedDocument<IBookingPricing>;
+export type BookingPricingDocument = HydratedDocument<IBookingPricing & { _id: mongoose.Types.ObjectId }>;
 export type BookingPricingWithRoom = BookingPricingDocument & {
   roomId: IRoomDocument;
 };
@@ -92,4 +94,5 @@ const BookingPricing = mongoose.model<IBookingPricing>(
   "BookingPricing",
   BookingPricingSchema
 );
+
 export default BookingPricing;

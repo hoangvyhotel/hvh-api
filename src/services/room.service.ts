@@ -4,6 +4,7 @@ import { Types } from "mongoose";
 import * as roomDb from "@/db/room.db";
 import { BodyRequest, ParamsRequest, QueryRequest } from "@/types/request";
 import {
+  GetRoomAvailableResponse,
   RoomResponse,
   RoomResponseWithHotel,
 } from "@/types/response/roomResponse";
@@ -176,4 +177,17 @@ export const updateRangePrice = async (
   }
   await roomDb.updateRangePrice(data, fieldName);
   return ResponseHelper.success(null, "Cập nhật thành công");
+};
+
+export const getRoomAvailable = async (
+  req: QueryRequest<{ roomId: string, hotelId: string }>
+): Promise<GetRoomAvailableResponse> => {
+  const { roomId, hotelId } = req.query;
+  console.log("id", roomId, hotelId)
+  if (!Types.ObjectId.isValid(roomId)) {
+    throw AppError.badRequest("ID phòng không hợp lệ");
+  }
+
+  const data = await roomDb.getRoomAvailable(roomId, hotelId) ?? [];
+  return ResponseHelper.success(data, "Lấy danh sách phòng có sẵn thành công");
 };

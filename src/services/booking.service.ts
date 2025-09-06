@@ -2,6 +2,7 @@ import {
   AuthenticatedRequest,
   BodyRequest,
   ParamsRequest,
+  QueryRequest,
 } from "@/types/request";
 import {
   GetBookingInFoResponse,
@@ -130,7 +131,6 @@ export const changeTypeBooking = async (
 export const getBookingInfo = async (
   req: ParamsRequest<{ roomId: string }>
 ): Promise<GetBookingInFoResponse> => {
-
   const bookingInfo = await bookingDb.getBookingInfo(req);
   return ResponseHelper.success(
     bookingInfo,
@@ -223,4 +223,34 @@ export const removeBooking = async (
   } catch (error: any) {
     throw AppError.internal(error?.message || "Xảy ra lỗi khi hủy phòng");
   }
+};
+
+export const getNoteByBooking = async (
+  req: ParamsRequest<{ id: string }>
+): Promise<BaseResponse<Note | null>> => {
+  const { id } = req.params;
+  if (!Types.ObjectId.isValid(id)) {
+    throw AppError.badRequest("ID không hợp lệ");
+  }
+  try {
+    const data = await bookingDb.getNote(id);
+    return ResponseHelper.success(data, "Lấy ghi chú thành công");
+  } catch (error: any) {
+    throw AppError.internal(error?.message || "Xảy ra lỗi khi lấy ghi chú");
+  }
+};
+
+export const moveRoom = async (
+  req: BodyRequest<{ bookingId: string; newRoomId: string }>
+): Promise<BaseResponse<null>> => {
+  const { bookingId, newRoomId } = req.body;
+  if (
+    !Types.ObjectId.isValid(bookingId) ||
+    !Types.ObjectId.isValid(newRoomId)
+  ) {
+    throw AppError.badRequest("ID không hợp lệ");
+  }
+
+  await bookingDb.moveRoom(bookingId, newRoomId);
+  return ResponseHelper.success(null,"Đổi phòng thành công");
 };

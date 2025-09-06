@@ -10,6 +10,7 @@ import { ResponseHelper } from "@/utils/response";
 import * as roomService from "@/services/room.service";
 import { BodyRequest, ParamsRequest, QueryRequest } from "@/types/request";
 import {
+  GetRoomAvailableResponse,
   RoomResponse,
   RoomResponseWithHotel,
 } from "@/types/response/roomResponse";
@@ -113,4 +114,15 @@ export const updateRangePrice = catchAsyncErrorWithCode(
     res.status(201).json(result);
   },
   "UPDATE_RANGE_ERROR"
+);
+
+export const getRoomAvailable = catchAsyncErrorWithCode(
+  async (
+    req: QueryRequest<{ roomId: string; hotelId: string }>,
+    res: Response<GetRoomAvailableResponse>
+  ) => {
+    const result = await roomService.getRoomAvailable(req);
+    res.status(201).json(result);
+  },
+  "FETCH_ERROR"
 );

@@ -1,8 +1,8 @@
 import { IRoom, IRoomDocument, RoomModel } from "@/models/Room";
 import { UpdatePrice } from "@/types/request/room/UpdateRangePriceRequest.type";
-import { RoomResponse } from "@/types/response/roomResponse";
+import { RoomAvailable, RoomResponse } from "@/types/response/roomResponse";
 import { AppError } from "@/utils/AppError";
-import { Types } from "mongoose";
+import mongoose, { Types } from "mongoose";
 
 export async function findRoomById(id: string) {
   const room = await RoomModel.findById(id);
@@ -90,7 +90,11 @@ export const getRoom = async (id: string): Promise<any> => {
   return room;
 };
 
-export const updateTypeHireRoom = async (roomId: string, typeHire: number, session?: any) => {
+export const updateTypeHireRoom = async (
+  roomId: string,
+  typeHire: number,
+  session?: any
+) => {
   const result = await RoomModel.updateOne(
     { _id: new Types.ObjectId(roomId) },
     { $set: { typeHire } },
@@ -99,3 +103,31 @@ export const updateTypeHireRoom = async (roomId: string, typeHire: number, sessi
   return result;
 };
 
+export const getRoomAvailable = async (
+  roomId: string,
+  hotelId: string
+): Promise<RoomAvailable[]> => {
+  try {
+    const excludedRoomId = new mongoose.Types.ObjectId(roomId);
+    const hotelObjectId = new mongoose.Types.ObjectId(hotelId);
+
+    const rooms = await RoomModel.find(
+      {
+        _id: { $ne: excludedRoomId },
+        hotelId: hotelObjectId,
+        status: true,
+        typeHire: 0,
+      },
+      { name: 1 }
+    ).sort({ name: 1 });
+
+    // Map ra RoomAvailable
+    return rooms.map((r) => ({
+      id: r._id.toString(),
+      name: r.name,
+    }));
+  } catch (error) {
+    console.error("getRoomAvailable error:", error);
+    throw error;
+  }
+};
