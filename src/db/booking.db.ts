@@ -889,10 +889,16 @@ export const changePriceType = async (
         DAY: 3,
       };
 
+      const histories = typedBookingPricingUpdated.history.sort(
+        (a, b) => a.appliedFrom.getTime() - b.appliedFrom.getTime()
+      );
+      const lastIndex = histories.length - 1;
+      const prevHistory = histories[lastIndex - 1];
+
       // 4. Process based on current and new price type
       if (latestHistoryUpdated.priceType === "HOUR" && newPriceType === "DAY") {
         // Close current hour history
-        latestHistoryUpdated.appliedTo = currentTime; 
+        latestHistoryUpdated.appliedTo = currentTime;
         // Create new day history
         const newHistory: PricingHistory = {
           action: "CHANGE_TYPE",
@@ -924,39 +930,116 @@ export const changePriceType = async (
         latestHistoryUpdated.priceType === "NIGHT" &&
         newPriceType === "DAY"
       ) {
-        // Update night to day
-        latestHistoryUpdated.priceType = "DAY";
-        latestHistoryUpdated.appliedNightPrice = 0;
-        latestHistoryUpdated.appliedDayPrice = room.dayPrice;
-        latestHistoryUpdated.amount = room.dayPrice || 0;
+        if (prevHistory && prevHistory.priceType === "DAY") {
+          // Tính mốc 24h kể từ appliedFrom của prevHistory
+          const appliedFrom = new Date(prevHistory.appliedFrom);
+          const fullDayMark = new Date(appliedFrom);
+          fullDayMark.setHours(fullDayMark.getHours() + 24);
+
+          if (currentTime < fullDayMark) {
+            // rollback: vẫn dùng DAY cũ
+
+            // 1. Xóa bản ghi NIGHT hiện tại
+            typedBookingPricingUpdated.history.splice(lastIndex, 1);
+
+            // 3. Reset appliedTo của prevHistory (day) để tiếp tục tính
+            prevHistory.appliedTo = undefined;
+          }
+        } else {
+          // Đã đủ 24h → thực hiện logic chuyển sang DAY mới
+
+          latestHistoryUpdated.priceType = "DAY";
+          latestHistoryUpdated.appliedNightPrice = 0;
+          latestHistoryUpdated.appliedDayPrice = room.dayPrice;
+          latestHistoryUpdated.amount = room.dayPrice || 0;
+        }
         room.typeHire = typeHireMap[newPriceType];
       } else if (
         latestHistoryUpdated.priceType === "NIGHT" &&
         newPriceType === "HOUR"
       ) {
         // Update night to hour
-        latestHistoryUpdated.priceType = "HOUR";
-        latestHistoryUpdated.appliedNightPrice = 0;
-        latestHistoryUpdated.appliedFirstHourPrice = room.originalPrice;
-        latestHistoryUpdated.appliedNextHourPrice = room.afterHoursPrice;
+        const histories = typedBookingPricingUpdated.history.sort(
+          (a, b) => a.appliedFrom.getTime() - b.appliedFrom.getTime()
+        );
+        const lastIndex = histories.length - 1;
+        const prevHistory = histories[lastIndex - 1];
+
+        if (prevHistory && prevHistory.priceType === "HOUR") {
+          // 1. Khôi phục bản ghi giờ
+          if (prevHistory.appliedTo) {
+            const diffMs =
+              currentTime.getTime() - prevHistory.appliedTo.getTime();
+            const diffHours = Math.ceil(diffMs / (1000 * 60 * 60));
+
+            prevHistory.appliedTo = undefined;
+            prevHistory.amount! += diffHours * (room.afterHoursPrice || 0);
+          }
+
+          // 3. Xóa bản ghi NIGHT hiện tại
+          typedBookingPricingUpdated.history.splice(lastIndex, 1);
+        } else {
+          // Fallback: chuyển NIGHT → HOUR trực tiếp
+          latestHistoryUpdated.priceType = "HOUR";
+          latestHistoryUpdated.appliedNightPrice = 0;
+          latestHistoryUpdated.appliedFirstHourPrice = room.originalPrice;
+          latestHistoryUpdated.appliedNextHourPrice = room.afterHoursPrice;
+        }
+
         room.typeHire = typeHireMap[newPriceType];
       } else if (
         latestHistoryUpdated.priceType === "DAY" &&
         newPriceType === "HOUR"
       ) {
-        latestHistoryUpdated.priceType = "HOUR";
-        latestHistoryUpdated.appliedDayPrice = 0;
-        latestHistoryUpdated.appliedFirstHourPrice = room.originalPrice;
-        latestHistoryUpdated.appliedNextHourPrice = room.afterHoursPrice;
+        if (prevHistory && prevHistory.priceType === "HOUR") {
+          // 1. Khôi phục lại bản ghi giờ
+          if (prevHistory.appliedTo) {
+            // Tính số giờ phát sinh từ appliedTo cũ đến hiện tại
+            const diffMs =
+              currentTime.getTime() - prevHistory.appliedTo.getTime();
+            const diffHours = Math.ceil(diffMs / (1000 * 60 * 60));
+
+            prevHistory.appliedTo = undefined;
+            // cộng thêm tiền giờ phát sinh
+            prevHistory.amount! += diffHours * (room.afterHoursPrice || 0);
+          }
+
+          // 3. Xóa bản ghi ngày (latestHistoryUpdated)
+          typedBookingPricingUpdated.history.splice(lastIndex, 1);
+        } else {
+          // Không có bản ghi giờ trước đó -> fallback về logic cũ
+          latestHistoryUpdated.priceType = "HOUR";
+          latestHistoryUpdated.appliedDayPrice = 0;
+          latestHistoryUpdated.appliedFirstHourPrice = room.originalPrice;
+          latestHistoryUpdated.appliedNextHourPrice = room.afterHoursPrice;
+        }
+
         room.typeHire = typeHireMap[newPriceType];
       } else if (
         latestHistoryUpdated.priceType === "DAY" &&
         newPriceType === "NIGHT"
       ) {
-        latestHistoryUpdated.priceType = "NIGHT";
-        latestHistoryUpdated.appliedDayPrice = 0;
-        latestHistoryUpdated.appliedNightPrice = room.nightPrice;
-        room.typeHire = typeHireMap[newPriceType];
+        if (prevHistory && prevHistory.priceType === "NIGHT") {
+          // Tính mốc 12h trưa tiếp theo kể từ appliedFrom của prevHistory
+          const noonNextDay = new Date(prevHistory.appliedFrom);
+          noonNextDay.setDate(noonNextDay.getDate() + 1);
+          noonNextDay.setHours(12, 0, 0, 0);
+
+          if (currentTime < noonNextDay) {
+            // rollback: vẫn dùng NIGHT cũ
+
+            // 1. Xóa bản ghi DAY hiện tại
+            typedBookingPricingUpdated.history.splice(lastIndex, 1);
+
+            // 3. Reset appliedTo của prevHistory (night) để tiếp tục tính
+            prevHistory.appliedTo = undefined;
+          }
+        } else {
+          // Đã qua 12h → thực hiện logic chuyển sang NIGHT mới
+          latestHistoryUpdated.priceType = "NIGHT";
+          latestHistoryUpdated.appliedDayPrice = 0;
+          latestHistoryUpdated.appliedNightPrice = room.nightPrice;
+        }
       } else {
         throw AppError.badRequest(
           "Loại giá không hợp lệ hoặc không cần thay đổi"
