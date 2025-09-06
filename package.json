@@ -37,9 +37,7 @@
   "homepage": "https://github.com/hoangvyhotel/hvh-api#readme",
   "dependencies": {
     "@prisma/client": "^6.14.0",
-
     "@tailwindcss/vite": "^4.1.12",
-
     "@types/mongoose": "^5.11.96",
     "bcryptjs": "^2.4.3",
     "commander": "^11.1.0",
@@ -51,6 +49,7 @@
     "helmet": "^8.1.0",
     "joi": "^18.0.0",
     "jsonwebtoken": "^9.0.2",
+    "module-alias": "^2.2.3",
     "mongodb-schema": "^12.6.2",
     "mongoose": "^8.17.1",
     "morgan": "^1.10.1",
@@ -58,6 +57,9 @@
     "prisma": "^6.14.0",
     "winston": "^3.11.0",
     "zod": "^3.22.4"
+  },
+  "_moduleAliases": {
+    "@": "dist"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
