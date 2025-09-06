@@ -15,6 +15,7 @@ import { AppError } from "@/utils/AppError";
 // Import routes
 import apiRoute from "@/api/index";
 import { handleError } from "./utils/errorHandler";
+import { env } from "process";
 
 // Load environment variables
 dotenv.config();
@@ -36,6 +37,8 @@ class App {
    * Initialize all middlewares
    */
   private initializeMiddlewares(): void {
+    this.app.set("trust proxy", 1);
+
     // Security middleware
     this.app.use(
       helmet({
@@ -56,7 +59,10 @@ class App {
         origin:
           process.env.NODE_ENV === "production"
             ? process.env.ALLOWED_ORIGINS?.split(",")
-            : ["http://localhost:3001", "http://localhost:3000"],
+            : [
+                "http://localhost:3001",
+                "http://localhost:3000",
+              ],
         credentials: true,
         methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
         allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
