@@ -1,4 +1,4 @@
-import 'module-alias/register';
+import "module-alias/register";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -163,16 +163,18 @@ class App {
         logger.info(`🚀 Server is running on port ${this.port}`);
         logger.info(`📊 Environment: ${process.env.NODE_ENV}`);
         logger.info(`🔗 Health check: http://localhost:${this.port}/health`);
-        logger.info(
-          `📚 API Base URL: http://localhost:${this.port}/api/${apiRoute}/${
-            process.env.API_VERSION || "v1"
-          }`
-        );
+        const apiVersion = process.env.API_VERSION || "v1";
+        const basePath = `/api/${apiVersion}`;
+        const host = process.env.BASE_URL || `http://localhost:${this.port}`;
+
+        logger.info(`📚 API Base URL: ${host}${basePath}`);
       });
 
       server.on("error", (err: any) => {
         if (err && err.code === "EADDRINUSE") {
-          logger.error(`Port ${this.port} is already in use. Please free the port or change PORT env.`);
+          logger.error(
+            `Port ${this.port} is already in use. Please free the port or change PORT env.`
+          );
           // exit so process manager / nodemon can restart or show clearer message
           process.exit(1);
         }
