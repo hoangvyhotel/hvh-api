@@ -6,7 +6,7 @@ import {
   updateRoom,
   updateStatus,
   getAllRooms,
-  getAllRoomsByHotelId,
+  getRoomAvailable,
 } from "@/controllers/room.controller";
 import {
   validateCreateRoom,
@@ -25,6 +25,7 @@ const router = Router();
  */
 router.get("/", getAllRooms);
 router.get("/:id", getRoomById);
+router.patch("/available", getRoomAvailable);
 router.post("/", validateCreateRoom, createRoom);
 router.put("/:id", validateUpdateRoom, updateRoom);
 router.patch("/status/:id", validateUpdateStatus, updateStatus);

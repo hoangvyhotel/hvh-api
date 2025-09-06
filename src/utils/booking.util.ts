@@ -1,4 +1,5 @@
 import { findRoomById } from "@/db/room.db";
+import Booking from "@/models/Booking";
 import BookingPricing, { PricingHistory } from "@/models/BookingPricing";
 import { PricingHistoryType } from "@/types/response/booking";
 
@@ -31,7 +32,6 @@ export const calculateAndUpdatePricing = async (
     appliedDayPrice: historyRecord.appliedDayPrice,
     appliedNightPrice: historyRecord.appliedNightPrice,
   };
-          console.log("ok1")
 
   let result;
 
@@ -125,18 +125,19 @@ export const cacutaleNightAndUpdate = async (
     history.amount = history.appliedNightPrice || 0;
     return { closedNight: history };
   }
-    console.log("ok")
 
   const room = await findRoomById(roomId);
   if (!room) throw new Error("Room not found");
 
   const bookingPricing = await BookingPricing.findById(bookingPricingId);
-  if (!bookingPricing) throw new Error("BookingPricing not found");
+  const booking = await Booking.findById(bookingPricing?.bookingId);
+  if (!bookingPricing || !booking) throw new Error("BookingPricing not found");
 
   // đóng record Night
-  history.appliedTo = noonNextDay.toISOString();
-  history.amount = room.nightPrice;
-  history.appliedNightPrice = room.nightPrice;
+  const lastHistory = bookingPricing.history[bookingPricing.history.length - 1];
+  lastHistory.appliedTo = noonNextDay;
+  lastHistory.amount = room.nightPrice;
+  lastHistory.appliedNightPrice = room.nightPrice;
 
   // tạo record HOUR mới
   let nextHourHistory: PricingHistoryType = {
@@ -158,10 +159,13 @@ export const cacutaleNightAndUpdate = async (
   bookingPricing.priceType = "HOUR";
   bookingPricing.startTime = noonNextDay;
 
-  bookingPricing.calculatedAmount =
-    (bookingPricing.calculatedAmount || 0) +
-    (nextHourHistory.amount ?? room.originalPrice);
-
+  if (!booking.note?.NegotiatedPrice || booking.note?.NegotiatedPrice <= 0) {
+    bookingPricing.calculatedAmount =
+      (bookingPricing.calculatedAmount || 0) +
+      (nextHourHistory.amount ?? room.originalPrice);
+  }
+  room.typeHire = 1;
+  await room.save();
   await bookingPricing.save();
 
   return { closedNight: history, nextHourHistory };
@@ -191,12 +195,14 @@ export const cacutaleDayAndUpdate = async (
   if (!room) throw new Error("Room not found");
 
   const bookingPricing = await BookingPricing.findById(bookingPricingId);
-  if (!bookingPricing) throw new Error("BookingPricing not found");
+  const booking = await Booking.findById(bookingPricing?.bookingId);
 
-  // đóng record Day
-  history.appliedTo = nextDay.toISOString();
-  history.amount = room.dayPrice;
-  history.appliedDayPrice = room.dayPrice;
+  if (!bookingPricing || !booking) throw new Error("BookingPricing not found");
+
+  const lastHistory = bookingPricing.history[bookingPricing.history.length - 1];
+  lastHistory.appliedTo = nextDay;
+  lastHistory.amount = room.dayPrice;
+  lastHistory.appliedNightPrice = room.dayPrice;
 
   // tạo record HOUR mới (Amount ban đầu = 0, sẽ tính dần bằng cacutaleHour)
   let nextHourHistory: PricingHistoryType = {
@@ -219,10 +225,13 @@ export const cacutaleDayAndUpdate = async (
   // cập nhật BookingPricing main info
   bookingPricing.priceType = "HOUR";
   bookingPricing.startTime = nextDay;
-  bookingPricing.calculatedAmount =
-    (bookingPricing.calculatedAmount || 0) +
-    (nextHourHistory.amount ?? room.originalPrice);
-
+  if (!booking.note?.NegotiatedPrice || booking.note?.NegotiatedPrice < 0) {
+    bookingPricing.calculatedAmount =
+      (bookingPricing.calculatedAmount || 0) +
+      (nextHourHistory.amount ?? room.originalPrice);
+  }
+  room.typeHire = 1;
+  await room.save();
   await bookingPricing.save();
 
   return { closedDay: history, nextHourHistory };
@@ -237,7 +246,9 @@ export const updateSpecificHourHistory = async (
   if (!room) throw new Error("Room not found");
 
   const bookingPricing = await BookingPricing.findById(bookingPricingId);
-  if (!bookingPricing) throw new Error("BookingPricing not found");
+  const booking = await Booking.findById(bookingPricing?.bookingId);
+
+  if (!bookingPricing || !booking) throw new Error("BookingPricing not found");
 
   // Tìm history record cụ thể bằng _id sử dụng find()
   const historyRecord = bookingPricing.history.find(
@@ -259,7 +270,6 @@ export const updateSpecificHourHistory = async (
 
   // Lưu lại amount cũ để tính toán chênh lệch
   const oldAmount = historyRecord.amount || 0;
-  console.log("amount", oldAmount);
   // Tính toán amount mới
   const updatedHistory = cacutaleHour(
     {
@@ -280,17 +290,16 @@ export const updateSpecificHourHistory = async (
   // Tính chênh lệch a = amount_mới - amount_cũ
   const amountDifference =
     (updatedHistory.amount ?? room.originalPrice) - oldAmount;
-  console.log("updatedHistory.Amount", updatedHistory.amount);
-  console.log("amountDifference", amountDifference);
 
   // Cập nhật history record với amount mới
   historyRecord.amount = updatedHistory.amount;
   historyRecord.appliedFirstHourPrice = updatedHistory.appliedFirstHourPrice;
   historyRecord.appliedNextHourPrice = updatedHistory.appliedNextHourPrice;
-
-  // Cập nhật calculatedAmount: cộng dồn chênh lệch a
-  bookingPricing.calculatedAmount =
-    (bookingPricing.calculatedAmount || 0) + amountDifference;
+  if (!booking.note?.NegotiatedPrice || booking.note?.NegotiatedPrice < 0) {
+    // Cập nhật calculatedAmount: cộng dồn chênh lệch
+    bookingPricing.calculatedAmount =
+      (bookingPricing.calculatedAmount || 0) + amountDifference;
+  }
 
   await bookingPricing.save();
 

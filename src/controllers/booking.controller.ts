@@ -66,6 +66,17 @@ export const addNote = catchAsyncErrorWithCode(
   "ADD_ERROR"
 );
 
+export const getNote = catchAsyncErrorWithCode(
+  async (
+    req: ParamsRequest<{ id: string }>,
+    res: Response<BaseResponse<Note | null>>
+  ) => {
+    const result = await bookingService.getNoteByBooking(req);
+    res.status(200).json(result);
+  },
+  "FETCH_ERROR"
+);
+
 export const addUtility = catchAsyncErrorWithCode(
   async (
     req: BodyRequest<{
@@ -105,4 +116,16 @@ export const removeBooking = catchAsyncErrorWithCode(
     res.status(200).json(result);
   },
   "DELETE_ERROR"
+);
+
+
+export const moveRoom = catchAsyncErrorWithCode(
+  async (
+    req: BodyRequest<{ bookingId: string; newRoomId: string }>,
+    res: Response<BaseResponse<null>>
+  ) => {
+    const result = await bookingService.moveRoom(req);
+    res.status(201).json(result);
+  },
+  "MOVE_ERROR"
 );

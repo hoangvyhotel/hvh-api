@@ -18,7 +18,7 @@ const NoteSchema = new Schema<Note>(
 );
 export interface IBooking extends Document {
   _id: Types.ObjectId;
-  roomId: Schema.Types.ObjectId;
+  roomId: Types.ObjectId;
   checkin: Date;
   checkout?: Date;
   documentInfo?: Record<string, any>[];

@@ -25,6 +25,7 @@ export interface GetBookingInfo {
   RoomName: string;
   TypeBooking: string;
   CheckinDate: Date;
+  Times?: number;
   Surcharge?: Surcharge[];
   Notes?: Note;
   Utilities?: UtilitiesForBooking[];
@@ -40,7 +41,8 @@ export interface PricingHistoryType {
     | "DISCOUNT"
     | "PREPAID"
     | "NEGOTIATE"
-    | "SURCHARGE";
+    | "SURCHARGE"
+    | "CHANGE_ROOM";
   priceType?: string;
   amount?: number;
   description?: string;
@@ -50,6 +52,7 @@ export interface PricingHistoryType {
   appliedNextHourPrice?: number;
   appliedDayPrice?: number;
   appliedNightPrice?: number;
+  Times?: number;
 }
 
 export interface BookingPricing {
@@ -84,6 +87,7 @@ export interface Note {
   PayInAdvance?: number;
   NegotiatedPrice?: number;
   BookingPricingId?: string;
+  BookingId?: string;
 }
 
 export type GetRoomsByHotelResponse = BaseResponse<GetRoomsByHotel[]>;

@@ -1,7 +1,7 @@
 import { PricingHistory } from "@/models/BookingPricing";
 
 export interface PricingHistoryData {
-  action: "CREATE" | "CHANGE_TYPE" | "DISCOUNT" | "PREPAID" | "NEGOTIATE";
+  action: "CREATE" | "CHANGE_TYPE" | "DISCOUNT" | "PREPAID" | "NEGOTIATE"  | "CHANGE_ROOM";
   priceType?: string;
   amount?: number;
   description?: string;
