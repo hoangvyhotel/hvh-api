@@ -1,6 +1,5 @@
 import {
   addBooking,
-<<<<<<< HEAD
   addNote,
   addSurcharge,
   addUtility,
@@ -17,23 +16,14 @@ import {
   moveRoom,
   removeBooking,
   removeUtility,
-=======
-  getBookingInfo,
-  getBookings,
-  getRentalBookings,
-  getRoomsByHotel,
->>>>>>> 6efe901 (feat(getBookings): get bookings which has booked by guest)
 } from "@/controllers/booking.controller";
 import { Router } from "express";
 
 const router = Router();
 
-router.get("/", getBookings);
-router.get("/rental-bookings", getRentalBookings);
 router.get("/:id", getRoomsByHotel);
 router.post("/", addBooking);
 router.get("/booking-info/:roomId", getBookingInfo);
-<<<<<<< HEAD
 router.get("/get-note/:id", getNote);
 router.post("/add-surcharge", addSurcharge);
 router.post("/add-note/:id", addNote);
@@ -50,6 +40,4 @@ router.patch("/move-room", moveRoom);
 router.get("/booking-info/:roomId", getBookingInfo);
 router.patch("/change-type", changeTypeBooking);
 
-=======
->>>>>>> 6efe901 (feat(getBookings): get bookings which has booked by guest)
 export default router;

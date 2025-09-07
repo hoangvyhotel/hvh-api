@@ -4,6 +4,12 @@ import { RoomModel } from "@/models/Room";
 import { Types } from "mongoose";
 import { CreateBillRequest } from "@/types/request/bill/CreateBillRequest.type";
 import { UpdateBillRequest } from "@/types/request/bill/UpdateBillRequest.type";
+import { IBill } from "@/models/Bill";
+import * as bookingDb from "@/db/booking.db";
+import * as bookingPrincingDb from "@/db/booking-princing.db";
+import { ParamsRequest } from "@/types/request";
+import { changeRoomToAvailable, getHotelIdByRoomId } from "./room.service";
+import { getRoomsByHotelId } from "@/db/room.db";
 
 export class BillService {
   async getDailyTotals(month: number, year?: number, hotelId?: string) {
@@ -207,28 +213,63 @@ export class BillService {
   }
 
   // CRUD helpers
-  async createBill(payload: CreateBillRequest) {
-    if (!payload) throw AppError.badRequest("Dữ liệu không được để trống");
-    if (payload.totalRoomPrice == null || payload.totalUtilitiesPrice == null) {
-      throw AppError.badRequest(
-        "totalRoomPrice và totalUtilitiesPrice là bắt buộc"
-      );
+  async createBill(req: ParamsRequest<{ roomId: string }>) {
+    const roomId = req.params.roomId;
+    if (!roomId) {
+      throw AppError.badRequest("roomId is required");
     }
-    if (
-      typeof payload.totalRoomPrice !== "number" ||
-      typeof payload.totalUtilitiesPrice !== "number"
-    ) {
-      throw AppError.badRequest(
-        "totalRoomPrice và totalUtilitiesPrice phải là số"
-      );
+
+    // Validate roomId format
+    if (!Types.ObjectId.isValid(roomId)) {
+      throw AppError.badRequest("roomId không hợp lệ");
     }
-    if (!payload.roomId) throw AppError.badRequest("roomId là bắt buộc");
 
-    // prepare object for DB (coerce createdAt if provided)
-    const toSave: any = { ...payload };
-    if (toSave.createdAt) toSave.createdAt = new Date(toSave.createdAt as any);
+    // Get booking information from roomId
+    const bookingInfo = await bookingDb.getBookingInfo(req);
 
-    return await db.createBill(toSave);
+    if (!bookingInfo) {
+      throw AppError.notFound("Không tìm thấy thông tin booking cho phòng này");
+    }
+
+    // Calculate total room price from booking pricing
+    let totalRoomPrice = 0;
+    if (bookingInfo.BookingPricing && bookingInfo.BookingPricing.length > 0) {
+      totalRoomPrice = bookingInfo.BookingPricing.reduce((sum, pricing) => {
+        return sum + (pricing.CalculatedAmount || 0);
+      }, 0);
+    }
+
+    // Calculate total utilities price
+    let totalUtilitiesPrice = 0;
+    if (bookingInfo.Utilities && bookingInfo.Utilities.length > 0) {
+      totalUtilitiesPrice = bookingInfo.Utilities.reduce((sum, util) => {
+        const price = util.Price || 0;
+        return sum + util.Quantity * price;
+      }, 0);
+    }
+
+    const hotelId = await getHotelIdByRoomId(roomId);
+
+    const billToSave: IBill = {
+      roomId: new Types.ObjectId(roomId),
+      hotelId: new Types.ObjectId(hotelId),
+      totalRoomPrice,
+      totalUtilitiesPrice,
+    } as IBill;
+
+    // Save bill to database
+    const savedBill = await db.createBill(billToSave);
+
+    // Lưu xong bill. xóa booking và booking pricing, cập nhật lại trạng thái phòng
+    await bookingDb.deleteBooking(bookingInfo.BookingId.toString());
+    await bookingPrincingDb.deleteBookingPricing(
+      bookingInfo.BookingId.toString()
+    );
+
+    // reset room status to 'available'
+    await changeRoomToAvailable(roomId);
+
+    return savedBill;
   }
 
   async getBill(id: string) {
@@ -271,15 +312,41 @@ export class BillService {
     return bill;
   }
 
-  async listBills(query: {
-    page?: number;
-    pageSize?: number;
-    hotelId?: string;
-    roomId?: string;
-    from?: string;
-    to?: string;
-  }) {
-    const { data, total } = await db.listBills(query);
-    return { data, total };
+  async listBills(hotelId?: string) {
+    if (!hotelId) {
+      throw AppError.badRequest("hotelId is required");
+    }
+
+    if (!Types.ObjectId.isValid(hotelId)) {
+      throw AppError.badRequest("hotelId không hợp lệ");
+    }
+
+    const rooms = await getRoomsByHotelId(hotelId);
+    const bookingRooms = rooms.filter((room) => room.typeHire > 0);
+    const bookingRoomIds = bookingRooms.map((room) => room.id.toString());
+
+    // Lấy cả bookings (đang diễn ra) và bills (đã thanh toán)
+    const [bookings, bills] = await Promise.all([
+      bookingDb.getBookingsByRoomIds(bookingRoomIds),
+      db.getBillsByHotelId(hotelId),
+    ]);
+
+    // Gộp bookings và bills thành một mảng
+    // Thêm field 'type' để phân biệt
+    const bookingsWithType = bookings.map((booking: any) => ({
+      ...booking,
+    }));
+
+    const billsWithType = bills.map((bill: any) => ({
+      ...bill,
+    }));
+
+    // Gộp lại và sắp xếp theo thời gian tạo (mới nhất trước)
+    const allRecords = [...bookingsWithType, ...billsWithType].sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    return allRecords;
   }
 }

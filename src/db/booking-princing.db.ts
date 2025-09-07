@@ -146,10 +146,25 @@ export const updateBookingPricing = async (
 };
 
 export const addNote = async (data: Note) => {
-  const bookingPricing = await BookingPricing.findById(
-    data.BookingPricingId
-  );
+  const bookingPricing = await BookingPricing.findById(data.BookingPricingId);
   if (!bookingPricing) {
     throw AppError.notFound("Thao tác thất bại!");
   }
+};
+
+export const deleteBookingPricing = async (
+  bookingId: string
+): Promise<void> => {
+  if (!Types.ObjectId.isValid(bookingId)) {
+    throw AppError.badRequest("ID booking không hợp lệ");
+  }
+
+  const bookingPricings = await BookingPricing.find({
+    bookingId: new Types.ObjectId(bookingId),
+  });
+
+  if (bookingPricings.length === 0) {
+    throw AppError.notFound("Không tìm thấy chi tiết giá cho booking này");
+  }
+  await BookingPricing.deleteMany({ bookingId: new Types.ObjectId(bookingId) });
 };

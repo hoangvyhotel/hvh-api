@@ -154,7 +154,6 @@ export const getBookingInfo = async (
   const { roomId } = req.params;
   const roomObjectId = new Types.ObjectId(roomId);
 
-<<<<<<< HEAD
   const pipeline = [
     { $match: { roomId: roomObjectId } },
     {
@@ -208,6 +207,7 @@ export const getBookingInfo = async (
               _id: "$$it.utilitiesId",
               Name: "$$it.name",
               Quantity: "$$it.quantity",
+              Price: "$$it.price",
               Icon: {
                 $let: {
                   vars: {
@@ -247,15 +247,6 @@ export const getBookingInfo = async (
       },
     },
   ];
-=======
-  // 1. Lấy booking hiện tại dựa trên roomId
-  console.log("roomId", roomId);
-  const booking = await Booking.findOne({
-    roomId: new Types.ObjectId(roomId),
-  })
-    .lean()
-    .select("+documentInfo +carInfo +surcharge +note");
->>>>>>> 6efe901 (feat(getBookings): get bookings which has booked by guest)
 
   const result = await Booking.aggregate(pipeline).exec();
   if (!result || result.length === 0) {
@@ -586,7 +577,11 @@ export const updateDocumentInfo = async (
 export const updateCarInfo = async (
   bookingId: string,
   licensePlate: string,
-  updates: Partial<{ LicensePlate: string; Color?: string; VehicleType?: string }>
+  updates: Partial<{
+    LicensePlate: string;
+    Color?: string;
+    VehicleType?: string;
+  }>
 ) => {
   const booking = await Booking.findById(bookingId);
   if (!booking) throw AppError.notFound("Không tìm thấy booking!");

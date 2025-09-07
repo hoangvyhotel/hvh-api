@@ -17,6 +17,7 @@ export interface GetRoomsByHotel {
 
 interface UtilitiesForBooking {
   Quantity: number;
+  Price?: number;
   Icon: string;
 }
 

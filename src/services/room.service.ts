@@ -180,14 +180,14 @@ export const updateRangePrice = async (
 };
 
 export const getRoomAvailable = async (
-  req: QueryRequest<{ roomId: string, hotelId: string }>
+  req: QueryRequest<{ roomId: string; hotelId: string }>
 ): Promise<GetRoomAvailableResponse> => {
   const { roomId, hotelId } = req.query;
-  console.log("id", roomId, hotelId)
+  console.log("id", roomId, hotelId);
   if (!Types.ObjectId.isValid(roomId)) {
     throw AppError.badRequest("ID phòng không hợp lệ");
   }
 
-  const data = await roomDb.getRoomAvailable(roomId, hotelId) ?? [];
+  const data = (await roomDb.getRoomAvailable(roomId, hotelId)) ?? [];
   return ResponseHelper.success(data, "Lấy danh sách phòng có sẵn thành công");
 };
