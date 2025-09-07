@@ -129,13 +129,13 @@ export class AuthService {
     }
 
     // Ensure the user has admin role
-    const role = (user.role || "").toString();
-    if (role.toLowerCase() !== "admin") {
-      throw AppError.forbidden(
-        "Chỉ tài khoản có role 'admin' mới được phép đăng nhập bằng phương thức admin",
-        "FORBIDDEN_ADMIN_LOGIN"
-      );
-    }
+    // const role = (user.role || "").toString();
+    // if (role.toLowerCase() !== "admin") {
+    //   throw AppError.forbidden(
+    //     "Chỉ tài khoản có role 'admin' mới được phép đăng nhập bằng phương thức admin",
+    //     "FORBIDDEN_ADMIN_LOGIN"
+    //   );
+    // }
 
     const userInfo: UserInfo = {
       id: (user._id as Types.ObjectId).toString(),
