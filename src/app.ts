@@ -56,11 +56,7 @@ class App {
     // CORS configuration
     this.app.use(
       cors({
-        origin: [
-          ...(process.env.ALLOWED_ORIGINS?.split(",") || []),
-          "http://localhost:3001",
-          "http://localhost:3000",
-        ],
+        origin: ["https://hvh-web.vercel.app", "http://localhost:3000"],
         credentials: true,
         methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
         allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
