@@ -88,9 +88,8 @@ export const getMonthlyTotal = catchAsyncErrorWithCode(
 );
 
 export const createBill = catchAsyncErrorWithCode(
-  async (req: BodyRequest<CreateBillRequest>, res: Response) => {
-    const payload = req.body as CreateBillRequest;
-    const created = await service.createBill(payload);
+  async (req: ParamsRequest<{ roomId: string }>, res: Response) => {
+    const created = await service.createBill(req);
     res
       .status(201)
       .json(ResponseHelper.success(created, "Tạo hoá đơn thành công"));
@@ -134,37 +133,17 @@ export const deleteBill = catchAsyncErrorWithCode(
 
 export const listBills = catchAsyncErrorWithCode(
   async (
-    req: QueryRequest<{
-      page?: string;
-      pageSize?: string;
+    req: ParamsRequest<{
       hotelId?: string;
-      roomId?: string;
-      roomName: string;
-      from?: string;
-      to?: string;
     }>,
     res: Response
   ) => {
-    const { page, pageSize, hotelId, roomId, from, to } = req.query as any;
-    const result = await service.listBills({
-      page: Number(page) || 1,
-      pageSize: Number(pageSize) || 20,
-      hotelId,
-      roomId,
-      from,
-      to,
-    });
+    const hotelId = req.params.hotelId;
+    const bills = await service.listBills(hotelId);
+
     res
       .status(200)
-      .json(
-        ResponseHelper.paginated(
-          result.data,
-          Number(page) || 1,
-          Number(pageSize) || 20,
-          result.total,
-          "Lấy danh sách hoá đơn thành công"
-        )
-      );
+      .json(ResponseHelper.success(bills, "Lấy danh sách hoá đơn thành công"));
   },
   "BILL_LIST_ERROR"
 );

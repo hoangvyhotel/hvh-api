@@ -254,3 +254,45 @@ export async function listBills({
 
   return { data, total };
 }
+
+export const getBillsByHotelId = async (hotelId: string) => {
+  if (!Types.ObjectId.isValid(hotelId)) {
+    throw new Error("ID khách sạn không hợp lệ");
+  }
+
+  // Pipeline để join với room và lấy roomName
+  const pipeline = [
+    {
+      $match: {
+        hotelId: new Types.ObjectId(hotelId),
+      },
+    },
+    {
+      $lookup: {
+        from: "rooms",
+        localField: "roomId",
+        foreignField: "_id",
+        as: "room",
+      },
+    },
+    {
+      $unwind: {
+        path: "$room",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+    {
+      $project: {
+        _id: 1,
+        totalRoomPrice: 1,
+        totalUtilitiesPrice: 1,
+        createdAt: 1,
+        updatedAt: 1,
+        roomName: "$room.name",
+      },
+    },
+  ];
+
+  const bills = await Bill.aggregate(pipeline);
+  return bills;
+};

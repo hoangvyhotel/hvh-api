@@ -49,7 +49,6 @@ export const addBooking = catchAsyncErrorWithCode(
   "ADD_ERROR"
 );
 
-<<<<<<< HEAD
 export const addSurcharge = catchAsyncErrorWithCode(
   async (req: BodyRequest<Surcharge>, res: Response<BaseResponse<null>>) => {
     const result = await bookingService.AddSurcharge(req);
@@ -75,17 +74,11 @@ export const getNote = catchAsyncErrorWithCode(
     res: Response<BaseResponse<Note | null>>
   ) => {
     const result = await bookingService.getNoteByBooking(req);
-=======
-export const getBookings = catchAsyncErrorWithCode(
-  async (req: any, res: Response<BaseResponse<any>>) => {
-    const result = await bookingService.getBookings();
->>>>>>> 6efe901 (feat(getBookings): get bookings which has booked by guest)
     res.status(200).json(result);
   },
   "FETCH_ERROR"
 );
 
-<<<<<<< HEAD
 export const addUtility = catchAsyncErrorWithCode(
   async (
     req: BodyRequest<{
@@ -194,16 +187,10 @@ export const getDocumentInfo = catchAsyncErrorWithCode(
     res: Response<BaseResponse<any[]>>
   ) => {
     const result = await bookingService.getDocumentInfoService(req);
-=======
-export const getRentalBookings = catchAsyncErrorWithCode(
-  async (req: any, res: Response<BookingItemResponses>) => {
-    const result = await bookingService.getRentalBookings();
->>>>>>> 6efe901 (feat(getBookings): get bookings which has booked by guest)
     res.status(200).json(result);
   },
   "FETCH_ERROR"
 );
-<<<<<<< HEAD
 
 export const getCarInfo = catchAsyncErrorWithCode(
   async (
@@ -244,7 +231,11 @@ export const updateCarInfo = catchAsyncErrorWithCode(
     req: BodyRequest<{
       bookingId: string;
       licensePlate: string;
-      updates: Partial<{ LicensePlate: string; Color?: string; VehicleType?: string }>;
+      updates: Partial<{
+        LicensePlate: string;
+        Color?: string;
+        VehicleType?: string;
+      }>;
     }>,
     res: Response<BaseResponse<any>>
   ) => {
@@ -253,5 +244,3 @@ export const updateCarInfo = catchAsyncErrorWithCode(
   },
   "UPDATE_ERROR"
 );
-=======
->>>>>>> 6efe901 (feat(getBookings): get bookings which has booked by guest)

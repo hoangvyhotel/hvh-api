@@ -21,14 +21,10 @@ import * as utilityDb from "../db/utility.db";
 import { AppError } from "@/utils/AppError";
 import { Types } from "mongoose";
 import { RoomModel } from "@/models/Room";
-<<<<<<< HEAD
 import { asyncWrapProviders } from "async_hooks";
 import BookingPricing from "@/models/BookingPricing";
 import Utility from "@/models/Utility";
 import Booking from "@/models/Booking";
-=======
-import { IUtility } from "@/models/Utility";
->>>>>>> 6efe901 (feat(getBookings): get bookings which has booked by guest)
 export interface BookingPricingData {
   bookingId: Types.ObjectId;
   priceType: "HOUR" | "DAY" | "NIGHT";
@@ -118,7 +114,6 @@ export const getBookingInfo = async (
   );
 };
 
-<<<<<<< HEAD
 export const AddSurcharge = async (
   req: BodyRequest<Surcharge>
 ): Promise<BaseResponse<null>> => {
@@ -249,7 +244,16 @@ export const addDocumentInfo = async (
     EthnicGroup?: string;
   }>
 ): Promise<BaseResponse<null>> => {
-  const { bookingId, ID, TypeID, FullName, Address, BirthDay, Gender, EthnicGroup } = req.body;
+  const {
+    bookingId,
+    ID,
+    TypeID,
+    FullName,
+    Address,
+    BirthDay,
+    Gender,
+    EthnicGroup,
+  } = req.body;
   if (!Types.ObjectId.isValid(bookingId)) {
     throw AppError.badRequest("ID booking không hợp lệ");
   }
@@ -296,7 +300,8 @@ export const getDocumentInfoService = async (
   req: ParamsRequest<{ id: string }>
 ): Promise<BaseResponse<any[]>> => {
   const { id } = req.params;
-  if (!Types.ObjectId.isValid(id)) throw AppError.badRequest("ID booking không hợp lệ");
+  if (!Types.ObjectId.isValid(id))
+    throw AppError.badRequest("ID booking không hợp lệ");
   const docs = await bookingDb.getDocumentInfo(id);
   return ResponseHelper.success(docs, "Lấy thông tin giấy tờ thành công");
 };
@@ -305,7 +310,8 @@ export const getCarInfoService = async (
   req: ParamsRequest<{ id: string }>
 ): Promise<BaseResponse<any[]>> => {
   const { id } = req.params;
-  if (!Types.ObjectId.isValid(id)) throw AppError.badRequest("ID booking không hợp lệ");
+  if (!Types.ObjectId.isValid(id))
+    throw AppError.badRequest("ID booking không hợp lệ");
   const cars = await bookingDb.getCarInfo(id);
   return ResponseHelper.success(cars, "Lấy thông tin xe thành công");
 };
@@ -326,90 +332,39 @@ export const updateDocumentInfoService = async (
   }>
 ): Promise<BaseResponse<any>> => {
   const { bookingId, docId, updates } = req.body;
-  if (!Types.ObjectId.isValid(bookingId)) throw AppError.badRequest("ID booking không hợp lệ");
+  if (!Types.ObjectId.isValid(bookingId))
+    throw AppError.badRequest("ID booking không hợp lệ");
 
-  const updated = await bookingDb.updateDocumentInfo(bookingId, docId, updates as any);
-  return ResponseHelper.success(updated, "Cập nhật thông tin giấy tờ thành công");
+  const updated = await bookingDb.updateDocumentInfo(
+    bookingId,
+    docId,
+    updates as any
+  );
+  return ResponseHelper.success(
+    updated,
+    "Cập nhật thông tin giấy tờ thành công"
+  );
 };
 
 export const updateCarInfoService = async (
   req: BodyRequest<{
     bookingId: string;
     licensePlate: string;
-    updates: Partial<{ LicensePlate: string; Color?: string; VehicleType?: string }>;
+    updates: Partial<{
+      LicensePlate: string;
+      Color?: string;
+      VehicleType?: string;
+    }>;
   }>
 ): Promise<BaseResponse<any>> => {
   const { bookingId, licensePlate, updates } = req.body;
-  if (!Types.ObjectId.isValid(bookingId)) throw AppError.badRequest("ID booking không hợp lệ");
+  if (!Types.ObjectId.isValid(bookingId))
+    throw AppError.badRequest("ID booking không hợp lệ");
 
-  const updated = await bookingDb.updateCarInfo(bookingId, licensePlate, updates as any);
+  const updated = await bookingDb.updateCarInfo(
+    bookingId,
+    licensePlate,
+    updates as any
+  );
   return ResponseHelper.success(updated, "Cập nhật thông tin xe thành công");
-=======
-export const getBookings = async (): Promise<any> => {
-  const bookings = await bookingDb.getBookings();
-  return ResponseHelper.success(bookings, "Lấy danh sách booking thành công");
-};
-
-// Implementation hoàn chỉnh cho getRentalBookings
-export const getRentalBookings = async (): Promise<any> => {
-  const bookings = await bookingDb.getBookings();
-
-  // Sử dụng Promise.all để xử lý tất cả bookings song song
-  const bookingItems: BookingItemResponse[] = await Promise.all(
-    bookings.map(async (booking) => {
-      const room = booking.roomId as any; // Cast to 'any' to access room properties
-      console.log("room", room);
-      // if (!room) {
-      //   throw new Error("Không tìm thấy thông tin phòng cho booking này");
-      // }
-      const checkin = booking.checkin;
-
-      // Tính utilities price từ booking items với async/await
-      let utilitiesPrice = 0;
-
-      if (booking.items && booking.items.length > 0) {
-        // Xử lý tất cả utilities song song
-        const utilitiesPromises = booking.items.map(async (item) => {
-          try {
-            const utility = await utilityDb.getUtilityById(
-              item.utilitiesId.toString()
-            );
-            if (utility && utility.price && item.quantity) {
-              return utility.price * item.quantity;
-            }
-            return 0;
-          } catch (error) {
-            console.error("Lỗi khi lấy utility:", error);
-            return 0;
-          }
-        });
-
-        const utilitiesPrices = await Promise.all(utilitiesPromises);
-        utilitiesPrice = utilitiesPrices.reduce(
-          (total, price) => total + price,
-          0
-        );
-      }
-
-      console.log("utilitiesPrice", utilitiesPrice);
-
-      const roomPrice = room?.price || 0; // Lấy room price từ room info
-      const isCheckout = !!booking.checkout;
-
-      return {
-        roomName: room ? room.name : "Tên phòng không xác định",
-        checkin,
-        checkout: booking.checkout,
-        utilitiesPrice,
-        roomPrice,
-        isCheckout,
-      };
-    })
-  );
-
-  return ResponseHelper.success(
-    bookingItems,
-    "Lấy danh sách booking thành công"
-  );
->>>>>>> 6efe901 (feat(getBookings): get bookings which has booked by guest)
 };
