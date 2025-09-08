@@ -8,7 +8,7 @@ import { IBill } from "@/models/Bill";
 import * as bookingDb from "@/db/booking.db";
 import * as bookingPrincingDb from "@/db/booking-princing.db";
 import { ParamsRequest } from "@/types/request";
-import { changeRoomToAvailable, getHotelIdByRoomId } from "./room.service";
+import { changeRoomToAvailable } from "./room.service";
 import { getRoomsByHotelId } from "@/db/room.db";
 
 export class BillService {
@@ -213,64 +213,64 @@ export class BillService {
   }
 
   // CRUD helpers
-  async createBill(req: ParamsRequest<{ roomId: string }>) {
-    const roomId = req.params.roomId;
-    if (!roomId) {
-      throw AppError.badRequest("roomId is required");
-    }
+  // async createBill(req: ParamsRequest<{ roomId: string }>) {
+  //   const roomId = req.params.roomId;
+  //   if (!roomId) {
+  //     throw AppError.badRequest("roomId is required");
+  //   }
 
-    // Validate roomId format
-    if (!Types.ObjectId.isValid(roomId)) {
-      throw AppError.badRequest("roomId không hợp lệ");
-    }
+  //   // Validate roomId format
+  //   if (!Types.ObjectId.isValid(roomId)) {
+  //     throw AppError.badRequest("roomId không hợp lệ");
+  //   }
 
-    // Get booking information from roomId
-    const bookingInfo = await bookingDb.getBookingInfo(req);
+  //   // Get booking information from roomId
+  //   const bookingInfo = await bookingDb.getBookingInfo(req);
 
-    if (!bookingInfo) {
-      throw AppError.notFound("Không tìm thấy thông tin booking cho phòng này");
-    }
+  //   if (!bookingInfo) {
+  //     throw AppError.notFound("Không tìm thấy thông tin booking cho phòng này");
+  //   }
 
-    // Calculate total room price from booking pricing
-    let totalRoomPrice = 0;
-    if (bookingInfo.BookingPricing && bookingInfo.BookingPricing.length > 0) {
-      totalRoomPrice = bookingInfo.BookingPricing.reduce((sum, pricing) => {
-        return sum + (pricing.CalculatedAmount || 0);
-      }, 0);
-    }
+  //   // Calculate total room price from booking pricing
+  //   let totalRoomPrice = 0;
+  //   if (bookingInfo.BookingPricing && bookingInfo.BookingPricing.length > 0) {
+  //     totalRoomPrice = bookingInfo.BookingPricing.reduce((sum, pricing) => {
+  //       return sum + (pricing.CalculatedAmount || 0);
+  //     }, 0);
+  //   }
 
-    // Calculate total utilities price
-    let totalUtilitiesPrice = 0;
-    if (bookingInfo.Utilities && bookingInfo.Utilities.length > 0) {
-      totalUtilitiesPrice = bookingInfo.Utilities.reduce((sum, util) => {
-        const price = util.Price || 0;
-        return sum + util.Quantity * price;
-      }, 0);
-    }
+  //   // Calculate total utilities price
+  //   let totalUtilitiesPrice = 0;
+  //   if (bookingInfo.Utilities && bookingInfo.Utilities.length > 0) {
+  //     totalUtilitiesPrice = bookingInfo.Utilities.reduce((sum, util) => {
+  //       const price = util.Price || 0;
+  //       return sum + util.Quantity * price;
+  //     }, 0);
+  //   }
 
-    const hotelId = await getHotelIdByRoomId(roomId);
+  //   const hotelId = await getHotelIdByRoomId(roomId);
 
-    const billToSave: IBill = {
-      roomId: new Types.ObjectId(roomId),
-      hotelId: new Types.ObjectId(hotelId),
-      totalRoomPrice,
-      totalUtilitiesPrice,
-    } as IBill;
+  //   const billToSave: IBill = {
+  //     roomId: new Types.ObjectId(roomId),
+  //     hotelId: new Types.ObjectId(hotelId),
+  //     totalRoomPrice,
+  //     totalUtilitiesPrice,
+  //   } as IBill;
 
-    // Save bill to database
-    const savedBill = await db.createBill(billToSave);
+  //   // Save bill to database
+  //   const savedBill = await db.createBill(billToSave);
 
-    // Lưu xong bill. xóa booking và booking pricing, cập nhật lại trạng thái phòng
-    await bookingDb.deleteBooking(bookingInfo.BookingId.toString());
-    await bookingPrincingDb.deleteBookingPricing(
-      bookingInfo.BookingId.toString()
-    );
+  //   // Lưu xong bill. xóa booking và booking pricing, cập nhật lại trạng thái phòng
+  //   await bookingDb.deleteBooking(bookingInfo.BookingId.toString());
+  //   await bookingPrincingDb.deleteBookingPricing(
+  //     bookingInfo.BookingId.toString()
+  //   );
 
-    // reset room status to 'available'
-    await changeRoomToAvailable(roomId);
+  //   // reset room status to 'available'
+  //   await changeRoomToAvailable(roomId);
 
-    return savedBill;
-  }
+  //   return savedBill;
+  // }
 
   async getBill(id: string) {
     if (!id) throw AppError.badRequest("Id is required");

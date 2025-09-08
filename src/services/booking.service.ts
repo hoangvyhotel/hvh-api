@@ -267,6 +267,7 @@ export const getRentalBookings = async (): Promise<any> => {
     bookingItems,
     "Lấy danh sách booking thành công"
   );
+}
 
 export const getNoteByBooking = async (
   req: ParamsRequest<{ id: string }>

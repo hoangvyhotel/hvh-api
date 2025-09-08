@@ -192,7 +192,7 @@ export const changeRoomToAvailable = async (id: string) => {
   await roomDb.updateRoomById(id, room);
 };
 
-export const getHotelIdByRoomId = async (roomId: string): Promise<string> => {
+
 export const getRoomAvailable = async (
   req: QueryRequest<{ roomId: string, hotelId: string }>
 ): Promise<GetRoomAvailableResponse> => {
@@ -207,7 +207,6 @@ export const getRoomAvailable = async (
     throw AppError.notFound("Không tìm thấy phòng với ID đã cho");
   }
 
-  return room.hotelId.toString();
   const data = await roomDb.getRoomAvailable(roomId, hotelId) ?? [];
   return ResponseHelper.success(data, "Lấy danh sách phòng có sẵn thành công");
 };

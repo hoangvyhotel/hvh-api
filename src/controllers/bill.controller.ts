@@ -87,15 +87,15 @@ export const getMonthlyTotal = catchAsyncErrorWithCode(
   "BILL_MONTHLY_TOTAL_ERROR"
 );
 
-export const createBill = catchAsyncErrorWithCode(
-  async (req: ParamsRequest<{ roomId: string }>, res: Response) => {
-    const created = await service.createBill(req);
-    res
-      .status(201)
-      .json(ResponseHelper.success(created, "Tạo hoá đơn thành công"));
-  },
-  "BILL_CREATE_ERROR"
-);
+// export const createBill = catchAsyncErrorWithCode(
+//   async (req: ParamsRequest<{ roomId: string }>, res: Response) => {
+//     const created = await service.createBill(req);
+//     res
+//       .status(201)
+//       .json(ResponseHelper.success(created, "Tạo hoá đơn thành công"));
+//   },
+//   "BILL_CREATE_ERROR"
+// );
 
 export const getBill = catchAsyncErrorWithCode(
   async (req: ParamsRequest<{ id: string }>, res: Response) => {

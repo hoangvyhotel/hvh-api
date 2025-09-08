@@ -134,6 +134,8 @@ export const getRentalBookings = catchAsyncErrorWithCode(
     res.status(200).json(result);
   },
   "FETCH_ERROR"
+);
+
 export const moveRoom = catchAsyncErrorWithCode(
   async (
     req: BodyRequest<{ bookingId: string; newRoomId: string }>,

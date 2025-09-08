@@ -785,6 +785,7 @@ export const getBookingsByRoomIds = async (roomIds: string[]) => {
 
   const bookings = await Booking.aggregate(pipeline);
   return bookings;
+}
 export const getNote = async (bookingId: string): Promise<Note | null> => {
   const booking = await Booking.findById(bookingId).select("note");
   if (!booking) {

@@ -2,7 +2,7 @@ import { Router } from "express";
 import {
   getDailyTotals,
   getMonthlyTotal,
-  createBill,
+  // createBill,
   getBill,
   updateBill,
   deleteBill,
@@ -17,7 +17,7 @@ router.post("/monthly", getMonthlyTotal);
 
 // CRUD
 router.get("/:hotelId", listBills);
-router.post("/:roomId", createBill);
+// router.post("/:roomId", createBill);
 router.get("/:id", getBill);
 router.put("/:id", updateBill);
 router.delete("/:id", deleteBill);
