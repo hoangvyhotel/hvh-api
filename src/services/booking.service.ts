@@ -21,10 +21,16 @@ import * as utilityDb from "../db/utility.db";
 import { AppError } from "@/utils/AppError";
 import { Types } from "mongoose";
 import { RoomModel } from "@/models/Room";
+<<<<<<< Updated upstream
 import { asyncWrapProviders } from "async_hooks";
 import BookingPricing from "@/models/BookingPricing";
 import Utility from "@/models/Utility";
 import Booking from "@/models/Booking";
+=======
+
+import Utility from "@/models/Utility";
+
+>>>>>>> Stashed changes
 export interface BookingPricingData {
   bookingId: Types.ObjectId;
   priceType: "HOUR" | "DAY" | "NIGHT";
