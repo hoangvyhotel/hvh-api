@@ -1245,3 +1245,198 @@ export const changePriceType = async (
 
   throw AppError.database("Failed to execute transaction after retries");
 };
+
+/**
+ * Lấy danh sách booking theo hotelId với định dạng giống như bill
+ * Chỉ lấy các phòng đang được thuê (typeHire > 0)
+ */
+export const getBookingsByHotelId = async (hotelId: string) => {
+  if (!Types.ObjectId.isValid(hotelId)) {
+    throw new Error("ID khách sạn không hợp lệ");
+  }
+
+  // Pipeline để join booking với room và tính toán pricing
+  const pipeline = [
+    // 1. Lookup rooms của hotel
+    {
+      $lookup: {
+        from: "rooms",
+        localField: "roomId",
+        foreignField: "_id",
+        as: "room",
+      },
+    },
+    { $unwind: "$room" },
+    // 2. Filter theo hotelId và typeHire > 0
+    {
+      $match: {
+        "room.hotelId": new Types.ObjectId(hotelId),
+        "room.typeHire": { $gt: 0 },
+      },
+    },
+    // 3. Lookup booking pricing
+    {
+      $lookup: {
+        from: "bookingpricings",
+        localField: "_id",
+        foreignField: "bookingId",
+        as: "pricing",
+      },
+    },
+    // 4. Lookup utilities từ booking items
+    {
+      $lookup: {
+        from: "utilities",
+        localField: "items.utilitiesId",
+        foreignField: "_id",
+        as: "utilities",
+      },
+    },
+    // 5. Project để tạo định dạng giống bill
+    {
+      $project: {
+        totalRoomPrice: {
+          $sum: "$pricing.calculatedAmount",
+        },
+        totalUtilitiesPrice: {
+          $sum: {
+            $map: {
+              input: "$items",
+              as: "item",
+              in: {
+                $let: {
+                  vars: {
+                    utility: {
+                      $arrayElemAt: [
+                        {
+                          $filter: {
+                            input: "$utilities",
+                            cond: { $eq: ["$$this._id", "$$item.utilitiesId"] },
+                          },
+                        },
+                        0,
+                      ],
+                    },
+                  },
+                  in: {
+                    $multiply: [
+                      "$$item.quantity",
+                      { $ifNull: ["$$utility.price", 0] },
+                    ],
+                  },
+                },
+              },
+            },
+          },
+        },
+        roomId: "$roomId",
+        hotelId: "$room.hotelId",
+        createdAt: "$createdAt",
+        updatedAt: "$updatedAt",
+      },
+    },
+  ];
+
+  const bookings = await Booking.aggregate(pipeline);
+  return bookings;
+};
+
+export const getBookingsByRoomIds = async (roomIds: string[]) => {
+  const roomObjectIds = roomIds.map((id) => new Types.ObjectId(id));
+
+  const pipeline: any[] = [
+    // Match bookings cho các roomIds được cung cấp
+    {
+      $match: {
+        roomId: { $in: roomObjectIds },
+      },
+    },
+    // Lookup room information
+    {
+      $lookup: {
+        from: "rooms",
+        localField: "roomId",
+        foreignField: "_id",
+        as: "room",
+      },
+    },
+    { $unwind: "$room" },
+
+    // Lookup utilities information
+    {
+      $lookup: {
+        from: "utilities",
+        localField: "items.utilitiesId",
+        foreignField: "_id",
+        as: "utilities",
+      },
+    },
+
+    // Lookup booking pricing
+    {
+      $lookup: {
+        from: "bookingpricings",
+        localField: "_id",
+        foreignField: "bookingId",
+        as: "bookingPricing",
+      },
+    },
+
+    // Project để format giống như bill
+    {
+      $project: {
+        _id: 1,
+        roomId: 1,
+        hotelId: "$room.hotelId",
+        createdAt: 1,
+        // Không include updatedAt như yêu cầu
+
+        // Tính tổng tiền phòng từ booking pricing
+        totalRoomPrice: {
+          $sum: "$bookingPricing.calculatedAmount",
+        },
+
+        // Tính tổng tiền utilities
+        totalUtilitiesPrice: {
+          $sum: {
+            $map: {
+              input: "$items",
+              as: "item",
+              in: {
+                $let: {
+                  vars: {
+                    utility: {
+                      $arrayElemAt: [
+                        {
+                          $filter: {
+                            input: "$utilities",
+                            cond: { $eq: ["$$this._id", "$$item.utilitiesId"] },
+                          },
+                        },
+                        0,
+                      ],
+                    },
+                  },
+                  in: {
+                    $multiply: [
+                      "$$item.quantity",
+                      { $ifNull: ["$$utility.price", 0] },
+                    ],
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+
+    // Sort by createdAt descending (mới nhất trước)
+    {
+      $sort: { createdAt: -1 },
+    },
+  ];
+
+  const bookings = await Booking.aggregate(pipeline);
+  return bookings;
+};

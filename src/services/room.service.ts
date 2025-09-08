@@ -191,3 +191,31 @@ export const getRoomAvailable = async (
   const data = (await roomDb.getRoomAvailable(roomId, hotelId)) ?? [];
   return ResponseHelper.success(data, "Lấy danh sách phòng có sẵn thành công");
 };
+
+export const changeRoomToAvailable = async (roomId: string) => {
+  if (!Types.ObjectId.isValid(roomId)) {
+    throw AppError.badRequest("ID phòng không hợp lệ");
+  }
+  const room = await roomDb.findRoomById(roomId);
+  if (!room) {
+    throw AppError.notFound("Không tìm thấy phòng với ID đã cho");
+  }
+
+  const updatedRoom = await RoomModel.findByIdAndUpdate(
+    roomId,
+    { typeHire: 0 },
+    { new: true }
+  );
+  return updatedRoom;
+};
+
+export const getHotelIdByRoomId = async (roomId: string) => {
+  if (!Types.ObjectId.isValid(roomId)) {
+    throw AppError.badRequest("ID phòng không hợp lệ");
+  }
+  const room = await roomDb.findRoomById(roomId);
+  if (!room) {
+    throw AppError.notFound("Không tìm thấy phòng với ID đã cho");
+  }
+  return room.hotelId.toString();
+};

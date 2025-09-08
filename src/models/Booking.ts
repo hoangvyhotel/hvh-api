@@ -1,7 +1,7 @@
 import mongoose, { Document, Schema, Types } from "mongoose";
 import { Note } from "@/types/response/booking";
 export interface IBookingItem {
-  utilitiesId: Types.ObjectId; 
+  utilitiesId: Types.ObjectId;
   quantity: number;
   price?: number;
   name?: string;
@@ -90,23 +90,7 @@ const BookingSchema = new Schema<IBooking>(
       ],
       default: [],
     },
-<<<<<<< HEAD
     note: { type: NoteSchema, required: false },
-=======
-    note: {
-      type: [
-        {
-          type: Schema.Types.Mixed,
-          required: false,
-        },
-      ],
-      default: [],
-    },
-    items: {
-      type: [BookingItemSchema],
-      default: [],
-    },
->>>>>>> 6efe901 (feat(getBookings): get bookings which has booked by guest)
   },
   { timestamps: true }
 );

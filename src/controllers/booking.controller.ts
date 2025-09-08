@@ -74,17 +74,6 @@ export const getNote = catchAsyncErrorWithCode(
     res: Response<BaseResponse<Note | null>>
   ) => {
     const result = await bookingService.getNoteByBooking(req);
-<<<<<<< Updated upstream
-=======
-    res.status(200).json(result);
-  },
-  "FETCH_ERROR"
-);
-
-export const getBookings = catchAsyncErrorWithCode(
-  async (req: any, res: Response<BaseResponse<any>>) => {
-    const result = await bookingService.getBookings();
->>>>>>> Stashed changes
     res.status(200).json(result);
   },
   "FETCH_ERROR"
@@ -198,17 +187,6 @@ export const getDocumentInfo = catchAsyncErrorWithCode(
     res: Response<BaseResponse<any[]>>
   ) => {
     const result = await bookingService.getDocumentInfoService(req);
-<<<<<<< Updated upstream
-=======
-    res.status(200).json(result);
-  },
-  "FETCH_ERROR"
-);
-
-export const getRentalBookings = catchAsyncErrorWithCode(
-  async (req: any, res: Response<BookingItemResponses>) => {
-    const result = await bookingService.getRentalBookings();
->>>>>>> Stashed changes
     res.status(200).json(result);
   },
   "FETCH_ERROR"
