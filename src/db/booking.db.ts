@@ -475,6 +475,129 @@ export const addNote = async (bookingId: string, note: Note) => {
   return { booking, bookingPricing };
 };
 
+export const addDocumentInfo = async (
+  bookingId: string,
+  doc: {
+    ID: string;
+    TypeID?: string;
+    TypeId?: string; // accept alternate casing from client
+    FullName: string;
+    Address?: string;
+    BirthDay?: string;
+    Gender?: boolean;
+    EthnicGroup?: string;
+  }
+) => {
+  const booking = await Booking.findById(bookingId);
+  if (!booking) throw AppError.notFound("Không tìm thấy booking!");
+
+  const docEntry = {
+    ID: doc.ID,
+    // normalize TypeID: accept either TypeID or TypeId from client
+    TypeID: doc.TypeID ?? doc.TypeId ?? "CCCD",
+    FullName: doc.FullName,
+    Address: doc.Address || "",
+    BirthDay: doc.BirthDay || "",
+    Gender: typeof doc.Gender === "boolean" ? doc.Gender : false,
+    EthnicGroup: doc.EthnicGroup || "",
+  };
+
+  booking.documentInfo = booking.documentInfo ?? [];
+  booking.documentInfo.push(docEntry as any);
+  await booking.save();
+
+  return booking;
+};
+
+export const addCarInfo = async (
+  bookingId: string,
+  car: { LicensePlate: string; Color?: string; VehicleType?: string }
+) => {
+  const booking = await Booking.findById(bookingId);
+  if (!booking) throw AppError.notFound("Không tìm thấy booking!");
+
+  const carEntry = {
+    LicensePlate: car.LicensePlate,
+    Color: car.Color || "",
+    VehicleType: car.VehicleType || "",
+  };
+
+  booking.carInfo = booking.carInfo ?? [];
+  booking.carInfo.push(carEntry as any);
+  await booking.save();
+
+  return booking;
+};
+
+export const getDocumentInfo = async (bookingId: string) => {
+  const booking = await Booking.findById(bookingId).select("documentInfo");
+  if (!booking) throw AppError.notFound("Không tìm thấy booking!");
+  return booking.documentInfo ?? [];
+};
+
+export const getCarInfo = async (bookingId: string) => {
+  const booking = await Booking.findById(bookingId).select("carInfo");
+  if (!booking) throw AppError.notFound("Không tìm thấy booking!");
+  return booking.carInfo ?? [];
+};
+
+export const updateDocumentInfo = async (
+  bookingId: string,
+  docId: string,
+  updates: Partial<{
+    ID: string;
+    TypeID?: string;
+    FullName?: string;
+    Address?: string;
+    BirthDay?: string;
+    Gender?: boolean;
+    EthnicGroup?: string;
+  }>
+) => {
+  const booking = await Booking.findById(bookingId);
+  if (!booking) throw AppError.notFound("Không tìm thấy booking!");
+
+  booking.documentInfo = booking.documentInfo ?? [];
+  const docs = booking.documentInfo as any[];
+  const idx = docs.findIndex((d: any) => d?.ID === docId);
+  if (idx === -1) throw AppError.notFound("Không tìm thấy thông tin giấy tờ");
+
+  const existing = docs[idx] as any;
+  const updated = {
+    ...existing,
+    ...updates,
+  };
+
+  // replace
+  booking.documentInfo[idx] = updated as any;
+  await booking.save();
+  return updated;
+};
+
+export const updateCarInfo = async (
+  bookingId: string,
+  licensePlate: string,
+  updates: Partial<{ LicensePlate: string; Color?: string; VehicleType?: string }>
+) => {
+  const booking = await Booking.findById(bookingId);
+  if (!booking) throw AppError.notFound("Không tìm thấy booking!");
+
+  booking.carInfo = booking.carInfo ?? [];
+  const cars = booking.carInfo as any[];
+  const idx = cars.findIndex((c: any) => c?.LicensePlate === licensePlate);
+  if (idx === -1) throw AppError.notFound("Không tìm thấy thông tin xe");
+
+  const existing = cars[idx] as any;
+  const updated = {
+    ...existing,
+    ...updates,
+  };
+
+  booking.carInfo[idx] = updated as any;
+  await booking.save();
+  return updated;
+};
+
 export const addUtility = async (
   bookingId: string,
   utility: IUtility,

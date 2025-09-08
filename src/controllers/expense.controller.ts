@@ -63,3 +63,14 @@ export const deleteExpense = catchAsyncErrorWithCode(
   },
   "DELETE_ERROR"
 );
+
+export const getMonthlyExpenseTotal = catchAsyncErrorWithCode(
+  async (
+    req: BodyRequest<{ hotelId: string; month: string; year?: string }>,
+    res: Response<BaseResponse<{ total: number }>>
+  ) => {
+    const result = await expenseService.getMonthlyExpenseTotal(req);
+    res.status(200).json(result);
+  },
+  "FETCH_ERROR"
+);

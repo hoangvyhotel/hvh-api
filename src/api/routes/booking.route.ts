@@ -3,6 +3,12 @@ import {
   addNote,
   addSurcharge,
   addUtility,
+  addDocumentInfo,
+  addCarInfo,
+  updateDocumentInfo,
+  updateCarInfo,
+  getDocumentInfo,
+  getCarInfo,
   changeTypeBooking,
   getBookingInfo,
   getNote,
@@ -23,6 +29,12 @@ router.post("/add-surcharge", addSurcharge);
 router.post("/add-note/:id", addNote);
 router.post("/add-utility", addUtility);
 router.delete("/remove-utility", removeUtility);
+router.post("/add-document", addDocumentInfo);
+router.post("/add-car", addCarInfo);
+router.get("/document/:id", getDocumentInfo);
+router.get("/car/:id", getCarInfo);
+router.put("/document", updateDocumentInfo);
+router.put("/car", updateCarInfo);
 router.delete("/remove-booking/:id", removeBooking);
 router.patch("/move-room", moveRoom);
 router.get("/booking-info/:roomId", getBookingInfo);

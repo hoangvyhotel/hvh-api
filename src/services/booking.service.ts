@@ -227,3 +227,113 @@ export const moveRoom = async (
   await bookingDb.moveRoom(bookingId, newRoomId);
   return ResponseHelper.success(null, "Đổi phòng thành công");
 };
+
+export const addDocumentInfo = async (
+  req: BodyRequest<{
+    bookingId: string;
+    ID: string;
+    TypeID?: string;
+    TypeId?: string;
+    FullName: string;
+    Address?: string;
+    BirthDay?: string;
+    Gender?: boolean;
+    EthnicGroup?: string;
+  }>
+): Promise<BaseResponse<null>> => {
+  const { bookingId, ID, TypeID, FullName, Address, BirthDay, Gender, EthnicGroup } = req.body;
+  if (!Types.ObjectId.isValid(bookingId)) {
+    throw AppError.badRequest("ID booking không hợp lệ");
+  }
+
+  // Normalize TypeID (accept TypeID or TypeId)
+  const normalizedTypeID = TypeID ?? (req.body as any).TypeId ?? undefined;
+
+  await bookingDb.addDocumentInfo(bookingId, {
+    ID,
+    TypeID: normalizedTypeID,
+    FullName,
+    Address,
+    BirthDay,
+    Gender,
+    EthnicGroup,
+  });
+
+  return ResponseHelper.success(null, "Lưu thông tin giấy tờ thành công");
+};
+
+export const addCarInfoService = async (
+  req: BodyRequest<{
+    bookingId: string;
+    LicensePlate: string;
+    Color?: string;
+    VehicleType?: string;
+  }>
+): Promise<BaseResponse<null>> => {
+  const { bookingId, LicensePlate, Color, VehicleType } = req.body;
+  if (!Types.ObjectId.isValid(bookingId)) {
+    throw AppError.badRequest("ID booking không hợp lệ");
+  }
+
+  await bookingDb.addCarInfo(bookingId, {
+    LicensePlate,
+    Color,
+    VehicleType,
+  });
+
+  return ResponseHelper.success(null, "Lưu thông tin xe thành công");
+};
+
+export const getDocumentInfoService = async (
+  req: ParamsRequest<{ id: string }>
+): Promise<BaseResponse<any[]>> => {
+  const { id } = req.params;
+  if (!Types.ObjectId.isValid(id)) throw AppError.badRequest("ID booking không hợp lệ");
+  const docs = await bookingDb.getDocumentInfo(id);
+  return ResponseHelper.success(docs, "Lấy thông tin giấy tờ thành công");
+};
+
+export const getCarInfoService = async (
+  req: ParamsRequest<{ id: string }>
+): Promise<BaseResponse<any[]>> => {
+  const { id } = req.params;
+  if (!Types.ObjectId.isValid(id)) throw AppError.badRequest("ID booking không hợp lệ");
+  const cars = await bookingDb.getCarInfo(id);
+  return ResponseHelper.success(cars, "Lấy thông tin xe thành công");
+};
+
+export const updateDocumentInfoService = async (
+  req: BodyRequest<{
+    bookingId: string;
+    docId: string; // using ID field as identifier
+    updates: Partial<{
+      ID: string;
+      TypeID?: string;
+      FullName?: string;
+      Address?: string;
+      BirthDay?: string;
+      Gender?: boolean;
+      EthnicGroup?: string;
+    }>;
+  }>
+): Promise<BaseResponse<any>> => {
+  const { bookingId, docId, updates } = req.body;
+  if (!Types.ObjectId.isValid(bookingId)) throw AppError.badRequest("ID booking không hợp lệ");
+
+  const updated = await bookingDb.updateDocumentInfo(bookingId, docId, updates as any);
+  return ResponseHelper.success(updated, "Cập nhật thông tin giấy tờ thành công");
+};
+
+export const updateCarInfoService = async (
+  req: BodyRequest<{
+    bookingId: string;
+    licensePlate: string;
+    updates: Partial<{ LicensePlate: string; Color?: string; VehicleType?: string }>;
+  }>
+): Promise<BaseResponse<any>> => {
+  const { bookingId, licensePlate, updates } = req.body;
+  if (!Types.ObjectId.isValid(bookingId)) throw AppError.badRequest("ID booking không hợp lệ");
+
+  const updated = await bookingDb.updateCarInfo(bookingId, licensePlate, updates as any);
+  return ResponseHelper.success(updated, "Cập nhật thông tin xe thành công");
+};
