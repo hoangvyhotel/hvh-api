@@ -51,7 +51,8 @@ export class AuthService {
     const userInfo: UserInfo = {
       id: (user._id as Types.ObjectId).toString(),
       userName: user.username,
-      role: user.role,
+  role: user.role,
+  hotelId: (user.hotelId as Types.ObjectId)?.toString(),
     };
 
     // Generate tokens and return login response
@@ -127,10 +128,20 @@ export class AuthService {
       );
     }
 
+    // Ensure the user has admin role
+    // const role = (user.role || "").toString();
+    // if (role.toLowerCase() !== "admin") {
+    //   throw AppError.forbidden(
+    //     "Chỉ tài khoản có role 'admin' mới được phép đăng nhập bằng phương thức admin",
+    //     "FORBIDDEN_ADMIN_LOGIN"
+    //   );
+    // }
+
     const userInfo: UserInfo = {
       id: (user._id as Types.ObjectId).toString(),
       userName: user.username,
-      role: user.role,
+  role: user.role,
+  hotelId: (user.hotelId as Types.ObjectId)?.toString(),
     };
 
     const tokens = await generateAccessToken(userInfo);

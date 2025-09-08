@@ -4,6 +4,7 @@ import { Types } from "mongoose";
 import * as roomDb from "@/db/room.db";
 import { BodyRequest, ParamsRequest, QueryRequest } from "@/types/request";
 import {
+  GetRoomAvailableResponse,
   RoomResponse,
   RoomResponseWithHotel,
 } from "@/types/response/roomResponse";
@@ -176,4 +177,37 @@ export const updateRangePrice = async (
   }
   await roomDb.updateRangePrice(data, fieldName);
   return ResponseHelper.success(null, "Cập nhật thành công");
+};
+
+export const changeRoomToAvailable = async (id: string) => {
+  if (!Types.ObjectId.isValid(id)) {
+    throw AppError.badRequest("ID phòng không hợp lệ");
+  }
+
+  const room = await roomDb.findRoomById(id);
+  if (!room) {
+    throw AppError.notFound("Không tìm thấy phòng với ID đã cho");
+  }
+  room.typeHire = 0; // set status to available
+  await roomDb.updateRoomById(id, room);
+};
+
+export const getHotelIdByRoomId = async (roomId: string): Promise<string> => {
+export const getRoomAvailable = async (
+  req: QueryRequest<{ roomId: string, hotelId: string }>
+): Promise<GetRoomAvailableResponse> => {
+  const { roomId, hotelId } = req.query;
+  console.log("id", roomId, hotelId)
+  if (!Types.ObjectId.isValid(roomId)) {
+    throw AppError.badRequest("ID phòng không hợp lệ");
+  }
+
+  const room = await roomDb.findRoomById(roomId);
+  if (!room) {
+    throw AppError.notFound("Không tìm thấy phòng với ID đã cho");
+  }
+
+  return room.hotelId.toString();
+  const data = await roomDb.getRoomAvailable(roomId, hotelId) ?? [];
+  return ResponseHelper.success(data, "Lấy danh sách phòng có sẵn thành công");
 };

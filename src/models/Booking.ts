@@ -1,16 +1,53 @@
-import mongoose, { Document, Schema } from "mongoose";
-
+import mongoose, { Document, Schema, Types } from "mongoose";
+import { Note } from "@/types/response/booking";
+export interface IBookingItem {
+  utilitiesId: Types.ObjectId;
+  quantity: number;
+  price?: number;
+  name?: string;
+}
+const NoteSchema = new Schema<Note>(
+  {
+    Content: { type: String },
+    Discount: { type: Number, default: 0 },
+    PayInAdvance: { type: Number, default: 0 },
+    NegotiatedPrice: { type: Number },
+    BookingPricingId: { type: String },
+  },
+  { _id: false } // vì chỉ có 1 note, không cần _id riêng
+);
 export interface IBooking extends Document {
-  roomId: Schema.Types.ObjectId;
+  _id: Types.ObjectId;
+  roomId: Types.ObjectId;
   checkin: Date;
   checkout?: Date;
-  documentInfo?: Record<string, any>[]; // list object JSON
-  carInfo?: Record<string, any>[]; // list object JSON
+  documentInfo?: Record<string, any>[];
+  carInfo?: Record<string, any>[];
   surcharge?: Record<string, any>[];
-  note?: Record<string, any>[];
+  note?: Note;
   createdAt?: Date;
   updatedAt?: Date;
+  items: IBookingItem[];
 }
+
+const BookingItemSchema = new Schema(
+  {
+    utilitiesId: {
+      type: Schema.Types.ObjectId,
+      ref: "Utility",
+      required: true,
+    },
+    quantity: {
+      type: Number,
+      required: true,
+      min: 1,
+    },
+    // Có thể thêm các field khác nếu cần
+    price: { type: Number }, // giá tại thời điểm booking
+    name: { type: String }, // tên dịch vụ tại thời điểm booking
+  },
+  { _id: true }
+); // cho phép tạo _id cho mỗi item
 
 const BookingSchema = new Schema<IBooking>(
   {
@@ -19,6 +56,10 @@ const BookingSchema = new Schema<IBooking>(
       ref: "Room",
       required: true,
       index: true,
+    },
+    items: {
+      type: [BookingItemSchema],
+      default: [],
     },
     checkin: { type: Date, required: true },
     checkout: { type: Date, required: false },
@@ -49,18 +90,12 @@ const BookingSchema = new Schema<IBooking>(
       ],
       default: [],
     },
-    note: {
-      type: [
-        {
-          type: Schema.Types.Mixed,
-          required: false,
-        },
-      ],
-      default: [],
-    },
+    note: { type: NoteSchema, required: false },
   },
   { timestamps: true }
 );
 
 const Booking = mongoose.model<IBooking>("Booking", BookingSchema);
+BookingSchema.index({ roomId: 1, checkin: 1 });
+BookingSchema.index({ "items.utilitiesId": 1 }); // để query theo utility
 export default Booking;

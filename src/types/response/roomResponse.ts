@@ -1,3 +1,4 @@
+import { getRoomAvailable } from "@/services/room.service";
 import { BaseResponse } from "./base";
 
 export interface RoomResponse {
@@ -16,4 +17,10 @@ export interface RoomResponse {
   updatedAt: Date; // Timestamp of when the room was last updated
 }
 
+export interface RoomAvailable {
+  id: string;
+  name: string;
+}
+
 export type RoomResponseWithHotel = BaseResponse<RoomResponse[]>;
+export type GetRoomAvailableResponse = BaseResponse<RoomAvailable[]>;

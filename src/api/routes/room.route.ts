@@ -6,14 +6,8 @@ import {
   updateRoom,
   updateStatus,
   getAllRooms,
-  getAllRoomsByHotelId,
+  getRoomAvailable,
 } from "@/controllers/room.controller";
-import {
-  validateCreateRoom,
-  validateUpdateRoom,
-  validateUpdateStatus,
-} from "@/middleware/room.validation";
-import { validateRoomUpdateRange } from "@/middleware/validation";
 
 const router = Router();
 
@@ -25,9 +19,10 @@ const router = Router();
  */
 router.get("/", getAllRooms);
 router.get("/:id", getRoomById);
-router.post("/", validateCreateRoom, createRoom);
-router.put("/:id", validateUpdateRoom, updateRoom);
-router.patch("/status/:id", validateUpdateStatus, updateStatus);
-router.patch("/update-range", validateRoomUpdateRange, updateRangePrice);
+router.post("/", createRoom);
+router.put("/:id", updateRoom);
+router.patch("/status/:id", updateStatus);
+router.patch("/update-range", updateRangePrice);
+
 
 export default router;

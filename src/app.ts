@@ -1,3 +1,4 @@
+import "module-alias/register";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -14,6 +15,7 @@ import { AppError } from "@/utils/AppError";
 // Import routes
 import apiRoute from "@/api/index";
 import { handleError } from "./utils/errorHandler";
+import { env } from "process";
 
 // Load environment variables
 dotenv.config();
@@ -35,6 +37,8 @@ class App {
    * Initialize all middlewares
    */
   private initializeMiddlewares(): void {
+    this.app.set("trust proxy", 1);
+
     // Security middleware
     this.app.use(
       helmet({
@@ -55,7 +59,10 @@ class App {
         origin:
           process.env.NODE_ENV === "production"
             ? process.env.ALLOWED_ORIGINS?.split(",")
-            : ["http://localhost:3001", "http://localhost:3000"],
+            : [
+                "http://localhost:3001",
+                "http://localhost:3000",
+              ],
         credentials: true,
         methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
         allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
@@ -162,16 +169,18 @@ class App {
         logger.info(`🚀 Server is running on port ${this.port}`);
         logger.info(`📊 Environment: ${process.env.NODE_ENV}`);
         logger.info(`🔗 Health check: http://localhost:${this.port}/health`);
-        logger.info(
-          `📚 API Base URL: http://localhost:${this.port}/api/${apiRoute}/${
-            process.env.API_VERSION || "v1"
-          }`
-        );
+        const apiVersion = process.env.API_VERSION || "v1";
+        const basePath = `/api/${apiVersion}`;
+        const host = process.env.BASE_URL || `http://localhost:${this.port}`;
+
+        logger.info(`📚 API Base URL: ${host}${basePath}`);
       });
 
       server.on("error", (err: any) => {
         if (err && err.code === "EADDRINUSE") {
-          logger.error(`Port ${this.port} is already in use. Please free the port or change PORT env.`);
+          logger.error(
+            `Port ${this.port} is already in use. Please free the port or change PORT env.`
+          );
           // exit so process manager / nodemon can restart or show clearer message
           process.exit(1);
         }
