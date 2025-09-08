@@ -142,3 +142,99 @@ export const changeTypeBooking = catchAsyncErrorWithCode(
   },
   "CHANGE_ERROR"
 );
+
+export const addDocumentInfo = catchAsyncErrorWithCode(
+  async (
+    req: BodyRequest<{
+      bookingId: string;
+      ID: string;
+      TypeID?: string;
+      FullName: string;
+      Address?: string;
+      BirthDay?: string;
+      Gender?: boolean;
+      EthnicGroup?: string;
+    }>,
+    res: Response<BaseResponse<null>>
+  ) => {
+    const result = await bookingService.addDocumentInfo(req);
+    res.status(200).json(result);
+  },
+  "ADD_ERROR"
+);
+
+export const addCarInfo = catchAsyncErrorWithCode(
+  async (
+    req: BodyRequest<{
+      bookingId: string;
+      LicensePlate: string;
+      Color?: string;
+      VehicleType?: string;
+    }>,
+    res: Response<BaseResponse<null>>
+  ) => {
+    const result = await bookingService.addCarInfoService(req);
+    res.status(200).json(result);
+  },
+  "ADD_ERROR"
+);
+
+export const getDocumentInfo = catchAsyncErrorWithCode(
+  async (
+    req: ParamsRequest<{ id: string }>,
+    res: Response<BaseResponse<any[]>>
+  ) => {
+    const result = await bookingService.getDocumentInfoService(req);
+    res.status(200).json(result);
+  },
+  "FETCH_ERROR"
+);
+
+export const getCarInfo = catchAsyncErrorWithCode(
+  async (
+    req: ParamsRequest<{ id: string }>,
+    res: Response<BaseResponse<any[]>>
+  ) => {
+    const result = await bookingService.getCarInfoService(req);
+    res.status(200).json(result);
+  },
+  "FETCH_ERROR"
+);
+
+export const updateDocumentInfo = catchAsyncErrorWithCode(
+  async (
+    req: BodyRequest<{
+      bookingId: string;
+      docId: string;
+      updates: Partial<{
+        ID: string;
+        TypeID?: string;
+        FullName?: string;
+        Address?: string;
+        BirthDay?: string;
+        Gender?: boolean;
+        EthnicGroup?: string;
+      }>;
+    }>,
+    res: Response<BaseResponse<any>>
+  ) => {
+    const result = await bookingService.updateDocumentInfoService(req);
+    res.status(200).json(result);
+  },
+  "UPDATE_ERROR"
+);
+
+export const updateCarInfo = catchAsyncErrorWithCode(
+  async (
+    req: BodyRequest<{
+      bookingId: string;
+      licensePlate: string;
+      updates: Partial<{ LicensePlate: string; Color?: string; VehicleType?: string }>;
+    }>,
+    res: Response<BaseResponse<any>>
+  ) => {
+    const result = await bookingService.updateCarInfoService(req);
+    res.status(200).json(result);
+  },
+  "UPDATE_ERROR"
+);

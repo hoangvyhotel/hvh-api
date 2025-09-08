@@ -45,6 +45,31 @@ const endDate = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
   );
 };
 
+export const getMonthlyExpenseTotal = async (
+  req: BodyRequest<{ hotelId: string; month: string; year?: string }>
+): Promise<BaseResponse<{ total: number }>> => {
+  const { hotelId, month, year } = req.body;
+  if (!Types.ObjectId.isValid(hotelId)) {
+    throw AppError.badRequest("ID khách sạn không hợp lệ");
+  }
+  const _year = year ? Number(year) : new Date().getUTCFullYear();
+  const _month = Number(month);
+  if (!_month || _month < 1 || _month > 12) {
+    throw AppError.badRequest("Tháng không hợp lệ");
+  }
+
+  const startDate = new Date(Date.UTC(_year, _month - 1, 1, 0, 0, 0, 0));
+  const endDate = new Date(Date.UTC(_year, _month, 0, 23, 59, 59, 999));
+
+  const total = await expenseDb.getMonthlyExpenseTotal(hotelId, startDate, endDate);
+
+  return ResponseHelper.success(
+    { total },
+    "Lấy tổng chi phí theo tháng thành công",
+    "FETCH_SUCCESS"
+  );
+};
+
 export const createExpense = async (
   req: BodyRequest<ExpenseCreateRequest>
 ): Promise<ExpenseCreateResponse> => {

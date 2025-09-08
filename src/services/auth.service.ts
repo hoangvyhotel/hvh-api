@@ -62,7 +62,7 @@ export class AuthService {
       user: userInfo,
       tokens,
     };
-  }
+  };
 
   async register(credentials: RegisterRequest): Promise<RegisterResponse> {
     const { username, password, passwordManage, hotelName } = credentials.body;

@@ -24,6 +24,31 @@ export const getAllExpenses = async (
   }));
 };
 
+export const getMonthlyExpenseTotal = async (
+  id: string,
+  startDate: Date,
+  endDate: Date
+): Promise<number> => {
+  const objectId = new Types.ObjectId(id);
+  const result = await ExpensesModel.aggregate([
+    {
+      $match: {
+        hotelId: objectId,
+        date: { $gte: startDate, $lte: endDate },
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        total: { $sum: "$amount" },
+      },
+    },
+  ]).exec();
+
+  if (!result || result.length === 0) return 0;
+  return result[0].total || 0;
+};
+
 export const createExpense = async (data: {
   date: Date;
   amount: number;

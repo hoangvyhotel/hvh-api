@@ -13,52 +13,6 @@ import { AdminLoginRequest } from "@/types/request/auth";
 const authService = new AuthService();
 
 /**
- * Send token response helper function
- */
-const sendToken = (user: any, statusCode: number, res: Response, req: any) => {
-  const token = user.getJWTToken();
-  const refreshToken = user.getRefreshToken();
-
-  const options = {
-    expires: new Date(
-      Date.now() + Number(process.env.COOKIE_EXPIRE) * 24 * 60 * 60 * 1000
-    ),
-    httpOnly: true,
-  };
-
-  res
-    .status(statusCode)
-    .cookie("token", token, options)
-    .json(
-      ResponseHelper.success(
-        {
-          user: {
-            id: user.Id,
-            email: user.Email,
-            userName: user.UserName,
-            firstName: user.FirstName,
-            lastName: user.LastName,
-            phone: user.Phone,
-            status: user.Status,
-            role: user.Role,
-            isEmailConfirmed: user.IsEmailConfirmed,
-            createdAt: user.CreatedAt,
-            updatedAt: user.UpdatedAt,
-          },
-          tokens: {
-            accessToken: token,
-            refreshToken,
-            expiresIn: 7 * 24 * 60 * 60,
-            tokenType: "Bearer",
-          },
-        },
-        "Login successful",
-        "LOGIN_SUCCESS"
-      )
-    );
-};
-
-/**
  * Login user
  */
 export const login = catchAsyncErrorWithCode(
