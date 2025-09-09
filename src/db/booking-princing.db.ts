@@ -146,7 +146,9 @@ export const updateBookingPricing = async (
 };
 
 export const addNote = async (data: Note) => {
-  const bookingPricing = await BookingPricing.findById(data.BookingPricingId);
+  const bookingPricing = await BookingPricing.findById(
+    data.BookingPricingId
+  );
   if (!bookingPricing) {
     throw AppError.notFound("Thao tác thất bại!");
   }

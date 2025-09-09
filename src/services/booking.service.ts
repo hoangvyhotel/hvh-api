@@ -25,6 +25,7 @@ import { asyncWrapProviders } from "async_hooks";
 import BookingPricing from "@/models/BookingPricing";
 import Utility from "@/models/Utility";
 import Booking from "@/models/Booking";
+import { IUtility } from "@/models/Utility";
 export interface BookingPricingData {
   bookingId: Types.ObjectId;
   priceType: "HOUR" | "DAY" | "NIGHT";
@@ -199,6 +200,73 @@ export const removeBooking = async (
   } catch (error: any) {
     throw AppError.internal(error?.message || "Xảy ra lỗi khi hủy phòng");
   }
+};
+export const getBookings = async (): Promise<any> => {
+  const bookings = await bookingDb.getBookings();
+  return ResponseHelper.success(bookings, "Lấy danh sách booking thành công");
+};
+
+// Implementation hoàn chỉnh cho getRentalBookings
+export const getRentalBookings = async (): Promise<any> => {
+  const bookings = await bookingDb.getBookings();
+
+  // Sử dụng Promise.all để xử lý tất cả bookings song song
+  const bookingItems: BookingItemResponse[] = await Promise.all(
+    bookings.map(async (booking) => {
+      const room = booking.roomId as any; // Cast to 'any' to access room properties
+      console.log("room", room);
+      // if (!room) {
+      //   throw new Error("Không tìm thấy thông tin phòng cho booking này");
+      // }
+      const checkin = booking.checkin;
+
+      // Tính utilities price từ booking items với async/await
+      let utilitiesPrice = 0;
+
+      if (booking.items && booking.items.length > 0) {
+        // Xử lý tất cả utilities song song
+        const utilitiesPromises = booking.items.map(async (item) => {
+          try {
+            const utility = await utilityDb.getUtilityById(
+              item.utilitiesId.toString()
+            );
+            if (utility && utility.price && item.quantity) {
+              return utility.price * item.quantity;
+            }
+            return 0;
+          } catch (error) {
+            console.error("Lỗi khi lấy utility:", error);
+            return 0;
+          }
+        });
+
+        const utilitiesPrices = await Promise.all(utilitiesPromises);
+        utilitiesPrice = utilitiesPrices.reduce(
+          (total, price) => total + price,
+          0
+        );
+      }
+
+      console.log("utilitiesPrice", utilitiesPrice);
+
+      const roomPrice = room?.price || 0; // Lấy room price từ room info
+      const isCheckout = !!booking.checkout;
+
+      return {
+        roomName: room ? room.name : "Tên phòng không xác định",
+        checkin,
+        checkout: booking.checkout,
+        utilitiesPrice,
+        roomPrice,
+        isCheckout,
+      };
+    })
+  );
+
+  return ResponseHelper.success(
+    bookingItems,
+    "Lấy danh sách booking thành công"
+  );
 };
 
 export const getNoteByBooking = async (

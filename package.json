@@ -4,9 +4,12 @@
   "description": "Hotel Management System Backend API",
   "main": "dist/app.js",
   "scripts": {
-    "start": "node dist/app.js",
-    "dev": "nodemon src/app.ts",
-    "build": "tsc",
+    "start": "node scripts/setup-aliases.js && node -r module-alias/register dist/app.js",
+    "start:prod": "NODE_ENV=production node scripts/setup-aliases.js && node -r module-alias/register dist/app.js",
+    "dev": "node scripts/setup-aliases.js && nodemon src/app.ts",
+    "build": "npm run prebuild && tsc && npm run build:aliases",
+    "build:aliases": "tsc-alias",
+    "prebuild": "rimraf dist",
     "test": "jest",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
@@ -75,8 +78,10 @@
     "eslint": "^8.52.0",
     "jest": "^29.7.0",
     "nodemon": "^3.1.10",
+    "rimraf": "^6.0.1",
     "ts-jest": "^29.1.1",
     "ts-node": "^10.9.1",
+    "tsc-alias": "^1.8.16",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.2.2"
   }

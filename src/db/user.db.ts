@@ -33,6 +33,11 @@ export const registerUserWithHotel = async (
   }
 };
 
+export const getUserByUsername = async (username: string) => {
+  const user = await Users.findOne({ username });
+  return user;
+};
+
 export const modifyPasswordUser = async (
   userId: string,
   newPassword: string
