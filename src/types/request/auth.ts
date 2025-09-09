@@ -21,7 +21,7 @@ export interface RefreshTokenRequest {
 }
 
 export interface ChangePasswordRequest {
-  userId: string;
+  username: string;
   currentPassword: string;
   newPassword: string;
   confirmPassword: string;

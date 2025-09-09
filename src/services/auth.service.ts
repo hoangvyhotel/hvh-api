@@ -51,8 +51,8 @@ export class AuthService {
     const userInfo: UserInfo = {
       id: (user._id as Types.ObjectId).toString(),
       userName: user.username,
-  role: user.role,
-  hotelId: (user.hotelId as Types.ObjectId)?.toString(),
+      role: user.role,
+      hotelId: (user.hotelId as Types.ObjectId)?.toString(),
     };
 
     // Generate tokens and return login response
@@ -62,7 +62,7 @@ export class AuthService {
       user: userInfo,
       tokens,
     };
-  };
+  }
 
   async register(credentials: RegisterRequest): Promise<RegisterResponse> {
     const { username, password, passwordManage, hotelName } = credentials.body;
@@ -140,8 +140,8 @@ export class AuthService {
     const userInfo: UserInfo = {
       id: (user._id as Types.ObjectId).toString(),
       userName: user.username,
-  role: user.role,
-  hotelId: (user.hotelId as Types.ObjectId)?.toString(),
+      role: user.role,
+      hotelId: (user.hotelId as Types.ObjectId)?.toString(),
     };
 
     const tokens = await generateAccessToken(userInfo);
@@ -150,21 +150,17 @@ export class AuthService {
   }
 
   async updateStaffPassword(request: ChangePasswordRequest) {
-    const { userId, currentPassword, newPassword, confirmPassword } = request;
+    const { username, currentPassword, newPassword, confirmPassword } = request;
 
     // Validate input parameters
-    if (!userId || !currentPassword || !newPassword || !confirmPassword) {
+    if (!username || !currentPassword || !newPassword || !confirmPassword) {
       throw AppError.badRequest(
         "Thiếu thông tin bắt buộc",
         "MISSING_REQUIRED_FIELDS"
       );
     }
 
-    if (!Types.ObjectId.isValid(userId)) {
-      throw AppError.badRequest("User ID không hợp lệ", "INVALID_USER_ID");
-    }
-
-    const user = await Users.findById(userId);
+    const user = await userDb.getUserByUserName(username);
 
     if (!user) {
       throw AppError.badRequest("Không tìm thấy người dùng", "USER_NOT_FOUND");
@@ -198,25 +194,21 @@ export class AuthService {
 
     const salt = await bcrypt.genSalt(10);
     const hashedNewPassword = await bcrypt.hash(newPassword, salt);
-    return await userDb.modifyPasswordUser(userId, hashedNewPassword);
+    return await userDb.modifyPasswordUser(user.id, hashedNewPassword);
   }
 
   async updateAdminPassword(request: ChangePasswordRequest) {
-    const { userId, currentPassword, newPassword, confirmPassword } = request;
+    const { username, currentPassword, newPassword, confirmPassword } = request;
 
     // Validate input parameters
-    if (!userId || !currentPassword || !newPassword || !confirmPassword) {
+    if (!username || !currentPassword || !newPassword || !confirmPassword) {
       throw AppError.badRequest(
         "Thiếu thông tin bắt buộc",
         "MISSING_REQUIRED_FIELDS"
       );
     }
 
-    if (!Types.ObjectId.isValid(userId)) {
-      throw AppError.badRequest("User ID không hợp lệ", "INVALID_USER_ID");
-    }
-
-    const user = await Users.findById(userId);
+    const user = await userDb.getUserByUsername(username);
 
     if (!user) {
       throw AppError.badRequest("Không tìm thấy người dùng", "USER_NOT_FOUND");
@@ -250,6 +242,6 @@ export class AuthService {
 
     const salt = await bcrypt.genSalt(10);
     const hashedNewPassword = await bcrypt.hash(newPassword, salt);
-    return await userDb.modifyPasswordUser(userId, hashedNewPassword);
+    return await userDb.modifyPasswordUser(user.id, hashedNewPassword);
   }
 }

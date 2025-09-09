@@ -23,5 +23,6 @@ router.post("/", createRoom);
 router.put("/:id", updateRoom);
 router.patch("/status/:id", updateStatus);
 router.patch("/update-range", updateRangePrice);
+router.patch("/available", getRoomAvailable);
 
 export default router;

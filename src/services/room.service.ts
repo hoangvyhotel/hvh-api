@@ -183,7 +183,6 @@ export const getRoomAvailable = async (
   req: QueryRequest<{ roomId: string; hotelId: string }>
 ): Promise<GetRoomAvailableResponse> => {
   const { roomId, hotelId } = req.query;
-  console.log("id", roomId, hotelId);
   if (!Types.ObjectId.isValid(roomId)) {
     throw AppError.badRequest("ID phòng không hợp lệ");
   }
