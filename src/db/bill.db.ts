@@ -20,40 +20,22 @@ export async function getBillsForMonth(
 ) {
   const now = new Date();
   const y = typeof year === "number" ? year : now.getFullYear();
+
+  // ngày đầu tháng
   const start = new Date(y, month - 1, 1);
+  // ngày đầu tháng kế tiếp
   const end = new Date(y, month, 1);
 
-  // Build aggregation pipeline so we can optionally join to Room and filter by hotelId
-  const pipeline: any[] = [
-    { $match: { createdAt: { $gte: start, $lt: end } } },
-  ];
+  // điều kiện filter
+  const filter: any = {
+    createdAt: { $gte: start, $lt: end },
+  };
 
   if (hotelId) {
-    const rooms = await RoomModel.find(
-      { hotelId: new Types.ObjectId(hotelId) },
-      { _id: 1 }
-    ).lean();
-    const roomIds = rooms.map((r: any) => r._id).filter(Boolean);
-    if (roomIds.length === 0) return [];
-    pipeline.push({ $match: { roomId: { $in: roomIds } } });
-    // join Room to access room.hotelId
-    pipeline.push(
-      {
-        $lookup: {
-          from: "rooms",
-          localField: "roomId",
-          foreignField: "_id",
-          as: "room",
-        },
-      },
-      { $unwind: "$room" },
-      { $match: { "room.hotelId": new Types.ObjectId(hotelId) } }
-    );
+    filter.hotelId = new Types.ObjectId(hotelId);
   }
 
-  pipeline.push({ $sort: { createdAt: -1 } });
-
-  return Bill.aggregate(pipeline).exec();
+  return Bill.find(filter).sort({ createdAt: -1 }).lean().exec();
 }
 
 /**

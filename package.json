@@ -62,7 +62,7 @@
     "zod": "^3.22.4"
   },
   "_moduleAliases": {
-    "@": "dist"
+    "@": "src"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
