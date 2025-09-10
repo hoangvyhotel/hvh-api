@@ -15,6 +15,7 @@ import { AppError } from "@/utils/AppError";
 // Import routes
 import apiRoute from "@/api/index";
 import { handleError } from "./utils/errorHandler";
+import { corsDebugMiddleware, addCorsDebugHeaders } from "@/middleware/cors-debug";
 import { env } from "process";
 
 // Load environment variables
@@ -39,6 +40,10 @@ class App {
   private initializeMiddlewares(): void {
     this.app.set("trust proxy", 1);
 
+    // CORS debug middleware (before CORS)
+    this.app.use(corsDebugMiddleware);
+    this.app.use(addCorsDebugHeaders);
+
     // Security middleware
     this.app.use(
       helmet({
@@ -54,15 +59,41 @@ class App {
     );
 
     // CORS configuration
+    const allowedOrigins = process.env.ALLOWED_ORIGINS 
+      ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
+      : [
+          "http://localhost:3000",
+          "http://localhost:5173",
+          "https://hvh-web.vercel.app", // Frontend Vercel domain
+        ];
+
+    // Log allowed origins for debugging
+    logger.info("🌐 CORS Allowed Origins:", allowedOrigins);
+
     this.app.use(
       cors({
-        origin: [
-          "http://localhost:3000",
-          "https://hvh-web.vercel.app", // đúng domain FE deploy
-        ],
+        origin: (origin, callback) => {
+          // Allow requests with no origin (mobile apps, postman, etc.)
+          if (!origin) return callback(null, true);
+          
+          // Check if the origin is allowed
+          if (allowedOrigins.includes(origin)) {
+            return callback(null, true);
+          }
+          
+          // Log blocked origin for debugging
+          logger.warn(`🚫 CORS blocked origin: ${origin}`);
+          return callback(new Error(`Origin ${origin} not allowed by CORS`), false);
+        },
         credentials: true,
         methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-        allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+        allowedHeaders: [
+          "Content-Type", 
+          "Authorization", 
+          "X-Requested-With",
+          "Accept",
+          "Origin"
+        ],
       })
     );
 
