@@ -62,7 +62,7 @@ export class BillService {
 
     // fetch bills for the month (no hotel filtering) then filter client-side by roomId string
     const rawBills: any[] = await db.getBillsForMonth(month, y);
-
+    console.log("data", rawBills)
     // build a map day -> totals
     const daysInMonth = new Date(y, month, 0).getDate();
     const now = new Date();
