@@ -56,9 +56,12 @@ class App {
     // CORS configuration
     this.app.use(
       cors({
-        origin: ["https://hvh-web.vercel.app", "http://localhost:3000"],
+        origin: [
+          "http://localhost:3000",
+          "https://hvh-web.vercel.app", // đúng domain FE deploy
+        ],
         credentials: true,
-        methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+        methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
         allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
       })
     );
@@ -80,6 +83,7 @@ class App {
     // Body parsing middleware
     this.app.use(express.json({ limit: "10mb" }));
     this.app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+    this.app.options("*", cors());
 
     // Logging middleware
     this.app.use(morgan("combined", { stream }));
