@@ -150,7 +150,23 @@ export async function createBill(payload: any) {
   const p: any = { ...payload };
   if (p.roomId && Types.ObjectId.isValid(p.roomId))
     p.roomId = new Types.ObjectId(p.roomId);
-  if (p.createdAt) p.createdAt = new Date(p.createdAt);
+
+  // Convert checkinTime and checkoutTime if they are strings
+  if (p.checkinTime && typeof p.checkinTime === "string") {
+    p.checkinTime = new Date(p.checkinTime);
+  }
+  if (p.checkoutTime && typeof p.checkoutTime === "string") {
+    p.checkoutTime = new Date(p.checkoutTime);
+  }
+
+  // Handle legacy createdAt/updatedAt for backward compatibility
+  if (p.createdAt && typeof p.createdAt === "string") {
+    p.createdAt = new Date(p.createdAt);
+  }
+  if (p.updatedAt) {
+    p.updatedAt = new Date(p.updatedAt);
+  }
+
   const doc = new Bill(p);
   return doc.save();
 }
@@ -286,8 +302,8 @@ export const getBillsByHotelId = async (hotelId: string) => {
         _id: 1,
         totalRoomPrice: 1,
         totalUtilitiesPrice: 1,
-        createdAt: 1,
-        updatedAt: 1,
+        checkinTime: 1,
+        checkoutTime: 1,
         roomName: "$room.name",
       },
     },

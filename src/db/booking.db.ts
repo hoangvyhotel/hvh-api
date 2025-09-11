@@ -1388,8 +1388,10 @@ export const getBookingsByRoomIds = async (roomIds: string[]) => {
         _id: 1,
         roomName: "$room.name",
         hotelId: "$room.hotelId",
-        createdAt: 1,
-        // Không include updatedAt như yêu cầu
+
+        // Thêm checkinTime và checkoutTime để đồng bộ với bill
+        checkinTime: "$createdAt", // Booking createdAt = checkin time
+        checkoutTime: null, // Booking chưa checkout nên để null
 
         // Tính tổng tiền phòng từ booking pricing
         totalRoomPrice: {

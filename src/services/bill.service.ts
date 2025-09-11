@@ -250,11 +250,19 @@ export class BillService {
 
     const hotelId = await getHotelIdByRoomId(roomId);
 
+    // Lấy thời điểm checkin từ booking
+    const checkinTime = bookingInfo.CheckinDate
+      ? new Date(bookingInfo.CheckinDate)
+      : new Date();
+    const checkoutTime = new Date(); // Thời điểm hiện tại (checkout)
+
     const billToSave: IBill = {
       roomId: new Types.ObjectId(roomId),
       hotelId: new Types.ObjectId(hotelId),
       totalRoomPrice,
       totalUtilitiesPrice,
+      checkinTime, // Thời gian checkin từ booking
+      checkoutTime, // Thời gian checkout (hiện tại)
     } as IBill;
 
     // Save bill to database
