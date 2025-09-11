@@ -135,11 +135,13 @@ export const listBills = catchAsyncErrorWithCode(
   async (
     req: ParamsRequest<{
       hotelId?: string;
+      date?: string; // YYYY-MM-DD
     }>,
     res: Response
   ) => {
     const hotelId = req.params.hotelId;
-    const bills = await service.listBills(hotelId);
+    const date = req.params.date;
+    const bills = await service.listBills(hotelId, date);
 
     res
       .status(200)

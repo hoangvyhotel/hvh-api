@@ -5,6 +5,8 @@ export interface IBill extends Document {
   totalUtilitiesPrice: number;
   roomId: mongoose.Types.ObjectId;
   hotelId: mongoose.Types.ObjectId;
+  checkIn: Date;   // 👈 ngày nhận phòng
+  checkOut: Date;  // 👈 ngày trả phòng
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -25,6 +27,8 @@ const BillSchema = new Schema<IBill>(
       required: true,
       index: true,
     },
+    checkIn: { type: Date, required: true },   // 👈 thêm field checkIn
+    checkOut: { type: Date, required: true },  // 👈 thêm field checkOut
   },
   { timestamps: true }
 );

@@ -62,7 +62,7 @@ export class BillService {
 
     // fetch bills for the month (no hotel filtering) then filter client-side by roomId string
     const rawBills: any[] = await db.getBillsForMonth(month, y);
-    console.log("data", rawBills)
+    console.log("data", rawBills);
     // build a map day -> totals
     const daysInMonth = new Date(y, month, 0).getDate();
     const now = new Date();
@@ -255,6 +255,8 @@ export class BillService {
       hotelId: new Types.ObjectId(hotelId),
       totalRoomPrice,
       totalUtilitiesPrice,
+      checkIn: bookingInfo.CheckinDate,
+      checkOut: new Date(),
     } as IBill;
 
     // Save bill to database
@@ -312,7 +314,7 @@ export class BillService {
     return bill;
   }
 
-  async listBills(hotelId?: string) {
+  async listBills(hotelId?: string, dateStr?: string) {
     if (!hotelId) {
       throw AppError.badRequest("hotelId is required");
     }
@@ -327,21 +329,22 @@ export class BillService {
 
     // Lấy cả bookings (đang diễn ra) và bills (đã thanh toán)
     const [bookings, bills] = await Promise.all([
-      bookingDb.getBookingsByRoomIds(bookingRoomIds),
-      db.getBillsByHotelId(hotelId),
+      bookingDb.getBookingsByRoomIds(bookingRoomIds, dateStr!),
+      db.getBillsByHotelId(hotelId, dateStr!),
     ]);
 
     // Gộp bookings và bills thành một mảng
     // Thêm field 'type' để phân biệt
     const bookingsWithType = bookings.map((booking: any) => ({
       ...booking,
+      type: "booking",
     }));
 
     const billsWithType = bills.map((bill: any) => ({
       ...bill,
+      type: "bill",
     }));
 
-    // Gộp lại và sắp xếp theo thời gian tạo (mới nhất trước)
     const allRecords = [...bookingsWithType, ...billsWithType].sort(
       (a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()

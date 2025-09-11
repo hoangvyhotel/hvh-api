@@ -16,7 +16,7 @@ router.post("/daily", getDailyTotals);
 router.post("/monthly", getMonthlyTotal);
 
 // CRUD
-router.get("/:hotelId", listBills);
+router.get("/:hotelId/:date", listBills);
 router.post("/:roomId", createBill);
 router.get("/:id", getBill);
 router.put("/:id", updateBill);

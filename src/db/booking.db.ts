@@ -1341,16 +1341,51 @@ export const getBookingsByHotelId = async (hotelId: string) => {
   return bookings;
 };
 
-export const getBookingsByRoomIds = async (roomIds: string[]) => {
+export const getBookingsByRoomIds = async (roomIds: string[], date?: string) => {
   const roomObjectIds = roomIds.map((id) => new Types.ObjectId(id));
+  
+  let matchCondition: any = {
+    roomId: { $in: roomObjectIds },
+  };
+
+  // Nếu có date filter, thêm điều kiện lọc theo ngày
+  if (date) {
+    const targetDate = new Date(date);
+    
+    // Tạo start và end của ngày để lọc chính xác
+    const startOfDay = new Date(targetDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    
+    const endOfDay = new Date(targetDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    // Lọc các booking có checkin trong ngày hoặc đang active trong ngày đó
+    matchCondition = {
+      ...matchCondition,
+      $or: [
+        // Case 1: Booking checkin trong ngày này
+        {
+          checkin: {
+            $gte: startOfDay,
+            $lte: endOfDay
+          }
+        },
+        // Case 2: Booking đang active trong ngày này (checkin trước, chưa checkout hoặc checkout sau)
+        {
+          checkin: { $lt: startOfDay },
+          $or: [
+            { checkout: null }, // chưa checkout
+            { checkout: { $gt: startOfDay } } // checkout sau start của ngày
+          ]
+        }
+      ]
+    };
+  }
 
   const pipeline: any[] = [
-    // Match bookings cho các roomIds được cung cấp
-    {
-      $match: {
-        roomId: { $in: roomObjectIds },
-      },
-    },
+    // Match bookings theo điều kiện
+    { $match: matchCondition },
+    
     // Lookup room information
     {
       $lookup: {
@@ -1389,7 +1424,8 @@ export const getBookingsByRoomIds = async (roomIds: string[]) => {
         roomName: "$room.name",
         hotelId: "$room.hotelId",
         createdAt: 1,
-        // Không include updatedAt như yêu cầu
+        checkin: 1,
+        checkout: 1,
 
         // Tính tổng tiền phòng từ booking pricing
         totalRoomPrice: {
@@ -1440,3 +1476,4 @@ export const getBookingsByRoomIds = async (roomIds: string[]) => {
   const bookings = await Booking.aggregate(pipeline);
   return bookings;
 };
+

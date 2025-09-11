@@ -237,16 +237,27 @@ export async function listBills({
   return { data, total };
 }
 
-export const getBillsByHotelId = async (hotelId: string) => {
+export const getBillsByHotelId = async (hotelId: string, date: string) => {
   if (!Types.ObjectId.isValid(hotelId)) {
     throw new Error("ID khách sạn không hợp lệ");
   }
 
-  // Pipeline để join với room và lấy roomName
+  // Convert string date -> Date (chỉ lấy ngày, bỏ time)
+  const targetDate = new Date(date);
+  const startOfDay = new Date(targetDate.setHours(0, 0, 0, 0));
+  const endOfDay = new Date(targetDate.setHours(23, 59, 59, 999));
+
   const pipeline = [
     {
       $match: {
         hotelId: new Types.ObjectId(hotelId),
+        $or: [
+          // Trường hợp checkIn/Out bao trùm ngày đó
+          {
+            checkIn: { $lte: endOfDay },
+            checkOut: { $gte: startOfDay },
+          },
+        ],
       },
     },
     {
@@ -271,10 +282,11 @@ export const getBillsByHotelId = async (hotelId: string) => {
         createdAt: 1,
         updatedAt: 1,
         roomName: "$room.name",
+        checkin: "$checkIn",
+        checkout: "$checkOut",
       },
     },
   ];
 
-  const bills = await Bill.aggregate(pipeline);
-  return bills;
+  return Bill.aggregate(pipeline);
 };
