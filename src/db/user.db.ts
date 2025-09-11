@@ -4,6 +4,7 @@ import { HotelModel } from "@/models/Hotel";
 
 export async function getUserByUserName(username: string) {
   const user = await Users.findOne({ username });
+  console.log("User fetched by username:", user);
   return user;
 }
 

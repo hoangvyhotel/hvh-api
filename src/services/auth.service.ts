@@ -152,6 +152,8 @@ export class AuthService {
   async updateStaffPassword(request: ChangePasswordRequest) {
     const { username, currentPassword, newPassword, confirmPassword } = request;
 
+    console.log("ChangePasswordRequest received:", request);
+
     // Validate input parameters
     if (!username || !currentPassword || !newPassword || !confirmPassword) {
       throw AppError.badRequest(
@@ -162,12 +164,14 @@ export class AuthService {
 
     const user = await userDb.getUserByUserName(username);
 
+    console.log("User fetched for password change:");
+
     if (!user) {
       throw AppError.badRequest("Không tìm thấy người dùng", "USER_NOT_FOUND");
     }
 
     // Check if user has a password set
-    if (!user.password) {
+    if (!user.passwordManage) {
       throw AppError.badRequest(
         "Người dùng chưa có mật khẩu",
         "NO_PASSWORD_SET"
@@ -199,7 +203,7 @@ export class AuthService {
 
   async updateAdminPassword(request: ChangePasswordRequest) {
     const { username, currentPassword, newPassword, confirmPassword } = request;
-
+    console.log("Request to change admin password:", request);
     // Validate input parameters
     if (!username || !currentPassword || !newPassword || !confirmPassword) {
       throw AppError.badRequest(
@@ -210,12 +214,14 @@ export class AuthService {
 
     const user = await userDb.getUserByUsername(username);
 
+    console.log("User fetched for password change:", user);
+
     if (!user) {
       throw AppError.badRequest("Không tìm thấy người dùng", "USER_NOT_FOUND");
     }
 
     // Check if user has a password set
-    if (!user.password) {
+    if (!user.passwordManage) {
       throw AppError.badRequest(
         "Người dùng chưa có mật khẩu",
         "NO_PASSWORD_SET"
@@ -224,7 +230,7 @@ export class AuthService {
 
     const isPasswordValid = await bcrypt.compare(
       currentPassword,
-      user.password
+      user.passwordManage
     );
     if (!isPasswordValid) {
       throw AppError.badRequest(
@@ -242,6 +248,6 @@ export class AuthService {
 
     const salt = await bcrypt.genSalt(10);
     const hashedNewPassword = await bcrypt.hash(newPassword, salt);
-    return await userDb.modifyPasswordUser(user.id, hashedNewPassword);
+    return await userDb.modifyPasswordManage(user.id, hashedNewPassword);
   }
 }

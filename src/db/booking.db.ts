@@ -1386,7 +1386,7 @@ export const getBookingsByRoomIds = async (roomIds: string[]) => {
     {
       $project: {
         _id: 1,
-        roomId: 1,
+        roomName: "$room.name",
         hotelId: "$room.hotelId",
         createdAt: 1,
         // Không include updatedAt như yêu cầu
