@@ -27,6 +27,7 @@ export interface GetBookingInfo {
   TypeBooking: string;
   CheckinDate: Date;
   Times?: number;
+  TotalAmountUtilities?: number;
   Surcharge?: Surcharge[];
   Notes?: Note;
   Utilities?: UtilitiesForBooking[];
