@@ -316,6 +316,16 @@ export const getBookingInfo = async (
   // Tính tổng số giờ của booking từ CheckinDate đến thời điểm hiện tại
   const totalHours = calculateHours(b.checkin, undefined);
 
+  // Tính tổng tiền utilities: quantity * price cho từng item
+  let totalAmountUtilities = 0;
+  if (b.Utilities && Array.isArray(b.Utilities)) {
+    totalAmountUtilities = b.Utilities.reduce((sum: number, u: any) => {
+      const qty = typeof u.Quantity === 'number' ? u.Quantity : 0;
+      const price = typeof u.Price === 'number' ? u.Price : 0;
+      return sum + qty * price;
+    }, 0);
+  }
+
   return {
     BookingId: b.BookingId,
     RoomName: b.RoomName,
@@ -329,6 +339,7 @@ export const getBookingInfo = async (
         : TYPE_BOOKINGS.HOUR,
     CheckinDate: b.checkin,
     Times: totalHours,
+    TotalAmountUtilities: totalAmountUtilities,
     Utilities: b.Utilities ?? [],
     Documents: (b.documentInfo ?? []).map((doc: any) => ({
       ID: doc.ID || "",
@@ -1119,7 +1130,7 @@ export const changePriceType = async (
         newPriceType === "HOUR"
       ) {
         if (prevHistory && prevHistory.priceType === "HOUR") {
-          // 1. Khôi phục lại bản ghi giờ
+          // 1. Khôi p  hục lại bản ghi giờ
           if (prevHistory.appliedTo) {
             // Tính số giờ phát sinh từ appliedTo cũ đến hiện tại
             const diffMs =
@@ -1151,7 +1162,7 @@ export const changePriceType = async (
           const noonNextDay = new Date(prevHistory.appliedFrom);
           noonNextDay.setDate(noonNextDay.getDate() + 1);
           noonNextDay.setHours(12, 0, 0, 0);
-
+          console.log("ok");
           if (currentTime < noonNextDay) {
             // rollback: vẫn dùng NIGHT cũ
 
@@ -1162,11 +1173,14 @@ export const changePriceType = async (
             prevHistory.appliedTo = undefined;
           }
         } else {
+          console.log("here");
           // Đã qua 12h → thực hiện logic chuyển sang NIGHT mới
           latestHistoryUpdated.priceType = "NIGHT";
           latestHistoryUpdated.appliedDayPrice = 0;
           latestHistoryUpdated.appliedNightPrice = room.nightPrice;
+          latestHistoryUpdated.amount = room.nightPrice || 0;
         }
+        room.typeHire = typeHireMap[newPriceType];
       } else {
         throw AppError.badRequest(
           "Loại giá không hợp lệ hoặc không cần thay đổi"
@@ -1206,6 +1220,7 @@ export const changePriceType = async (
 
       typedBookingPricingUpdated.calculatedAmount = Math.max(0, calculated);
       typedBookingPricingUpdated.priceType = newPriceType;
+      console.log("room typeHire", room.typeHire);
 
       // 7. Save All Changes
       await room.save({ session });
@@ -1341,9 +1356,12 @@ export const getBookingsByHotelId = async (hotelId: string) => {
   return bookings;
 };
 
-export const getBookingsByRoomIds = async (roomIds: string[], date?: string) => {
+export const getBookingsByRoomIds = async (
+  roomIds: string[],
+  date?: string
+) => {
   const roomObjectIds = roomIds.map((id) => new Types.ObjectId(id));
-  
+
   let matchCondition: any = {
     roomId: { $in: roomObjectIds },
   };
@@ -1351,11 +1369,11 @@ export const getBookingsByRoomIds = async (roomIds: string[], date?: string) => 
   // Nếu có date filter, thêm điều kiện lọc theo ngày
   if (date) {
     const targetDate = new Date(date);
-    
+
     // Tạo start và end của ngày để lọc chính xác
     const startOfDay = new Date(targetDate);
     startOfDay.setHours(0, 0, 0, 0);
-    
+
     const endOfDay = new Date(targetDate);
     endOfDay.setHours(23, 59, 59, 999);
 
@@ -1367,25 +1385,25 @@ export const getBookingsByRoomIds = async (roomIds: string[], date?: string) => 
         {
           checkin: {
             $gte: startOfDay,
-            $lte: endOfDay
-          }
+            $lte: endOfDay,
+          },
         },
         // Case 2: Booking đang active trong ngày này (checkin trước, chưa checkout hoặc checkout sau)
         {
           checkin: { $lt: startOfDay },
           $or: [
             { checkout: null }, // chưa checkout
-            { checkout: { $gt: startOfDay } } // checkout sau start của ngày
-          ]
-        }
-      ]
+            { checkout: { $gt: startOfDay } }, // checkout sau start của ngày
+          ],
+        },
+      ],
     };
   }
 
   const pipeline: any[] = [
     // Match bookings theo điều kiện
     { $match: matchCondition },
-    
+
     // Lookup room information
     {
       $lookup: {
@@ -1476,4 +1494,3 @@ export const getBookingsByRoomIds = async (roomIds: string[], date?: string) => 
   const bookings = await Booking.aggregate(pipeline);
   return bookings;
 };
-
