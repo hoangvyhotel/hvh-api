@@ -32,8 +32,8 @@ const roomSchema = new Schema<IRoomDocument>(
     afterHoursPrice: { type: Number, required: true },
     dayPrice: { type: Number, required: true },
     nightPrice: { type: Number, required: true },
-    description: { type: String, required: true },
-    typeHire: { type: Number, required: true },
+    description: { type: String },
+    typeHire: { type: Number, required: true, default: 0 },
     status: { type: Boolean, required: true },
     hotelId: {
       type: Schema.Types.ObjectId,

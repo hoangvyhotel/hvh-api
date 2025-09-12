@@ -3,8 +3,6 @@ import { RoomModel, IRoomDocument } from "@/models/Room";
 import Booking, { IBooking } from "@/models/Booking";
 import { IUtility } from "@/models/Utility";
 import { ParamsRequest } from "@/types/request/base";
-import { BaseResponse } from "@/types/response";
-import { ResponseHelper } from "@/utils/response";
 import { AppError } from "@/utils/AppError";
 import { GetBookingInfo, Note, Surcharge } from "@/types/response/booking";
 import BookingPricing, {
@@ -32,18 +30,6 @@ export interface PricingData {
   calculatedAmount: number;
 }
 
-interface PipelineBookingPricing {
-  _id: string | Types.ObjectId;
-  priceType: string;
-  startTime: Date | string;
-  endTime?: Date | string;
-  appliedFirstHourPrice?: number;
-  appliedNextHourPrice?: number;
-  appliedDayPrice?: number;
-  appliedNightPrice?: number;
-  calculatedAmount?: number;
-  history: PricingHistoryData[];
-}
 export interface GetRoomsByHotel {
   HotelId: string;
   RoomName: string;
@@ -1130,7 +1116,7 @@ export const changePriceType = async (
         newPriceType === "HOUR"
       ) {
         if (prevHistory && prevHistory.priceType === "HOUR") {
-          // 1. Khôi p  hục lại bản ghi giờ
+          // 1. Khôi phục lại bản ghi giờ
           if (prevHistory.appliedTo) {
             // Tính số giờ phát sinh từ appliedTo cũ đến hiện tại
             const diffMs =
@@ -1162,7 +1148,6 @@ export const changePriceType = async (
           const noonNextDay = new Date(prevHistory.appliedFrom);
           noonNextDay.setDate(noonNextDay.getDate() + 1);
           noonNextDay.setHours(12, 0, 0, 0);
-          console.log("ok");
           if (currentTime < noonNextDay) {
             // rollback: vẫn dùng NIGHT cũ
 
@@ -1173,7 +1158,6 @@ export const changePriceType = async (
             prevHistory.appliedTo = undefined;
           }
         } else {
-          console.log("here");
           // Đã qua 12h → thực hiện logic chuyển sang NIGHT mới
           latestHistoryUpdated.priceType = "NIGHT";
           latestHistoryUpdated.appliedDayPrice = 0;
@@ -1220,7 +1204,6 @@ export const changePriceType = async (
 
       typedBookingPricingUpdated.calculatedAmount = Math.max(0, calculated);
       typedBookingPricingUpdated.priceType = newPriceType;
-      console.log("room typeHire", room.typeHire);
 
       // 7. Save All Changes
       await room.save({ session });
@@ -1403,7 +1386,6 @@ export const getBookingsByRoomIds = async (
   const pipeline: any[] = [
     // Match bookings theo điều kiện
     { $match: matchCondition },
-
     // Lookup room information
     {
       $lookup: {

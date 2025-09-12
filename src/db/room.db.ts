@@ -19,7 +19,7 @@ export const getRoomsByHotelId = async (
     query.status = true;
   }
 
-  const rooms = await RoomModel.find(query).exec();
+  const rooms = await RoomModel.find(query).sort({ floor: 1, name: 1 }).exec();
 
   return rooms.map((room) => ({
     id: room._id.toString(),
