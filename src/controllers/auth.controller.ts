@@ -47,7 +47,15 @@ export const loginWithAdmin = catchAsyncErrorWithCode(
         hotelId: user.hotelId,
       };
 
-      res.status(200).json(ResponseHelper.success({ user: payload }, "Admin login successful", "LOGIN_SUCCESS"));
+    res
+      .status(200)
+      .json(
+        ResponseHelper.success(
+          { user },
+          "Đăng nhập quản trị viên thành công",
+          "LOGIN_SUCCESS"
+        )
+      );
   },
   "LOGIN_ADMIN_ERROR"
 );
