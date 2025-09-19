@@ -306,8 +306,8 @@ export const getBookingInfo = async (
   let totalAmountUtilities = 0;
   if (b.Utilities && Array.isArray(b.Utilities)) {
     totalAmountUtilities = b.Utilities.reduce((sum: number, u: any) => {
-      const qty = typeof u.Quantity === 'number' ? u.Quantity : 0;
-      const price = typeof u.Price === 'number' ? u.Price : 0;
+      const qty = typeof u.Quantity === "number" ? u.Quantity : 0;
+      const price = typeof u.Price === "number" ? u.Price : 0;
       return sum + qty * price;
     }, 0);
   }
@@ -976,7 +976,7 @@ export const changePriceType = async (
       const currentTime = new Date();
       const noonToday = new Date(currentTime);
       noonToday.setHours(12, 0, 0, 0);
-
+      const MS_IN_24H = 24 * 60 * 60 * 1000;
       // 2. Handle Price Type Change
       const latestHistory = typedBookingPricing.history
         .filter((h) => !h.appliedTo)
@@ -1021,34 +1021,61 @@ export const changePriceType = async (
 
       // 4. Process based on current and new price type
       if (latestHistoryUpdated.priceType === "HOUR" && newPriceType === "DAY") {
-        // Close current hour history
-        latestHistoryUpdated.appliedTo = currentTime;
-        // Create new day history
-        const newHistory: PricingHistory = {
-          action: "CHANGE_TYPE",
-          priceType: "DAY",
-          amount: room.dayPrice || 0,
-          appliedFrom: currentTime,
-          appliedDayPrice: room.dayPrice,
-        };
-        typedBookingPricingUpdated.history.push(newHistory);
-        room.typeHire = typeHireMap[newPriceType];
+        const appliedToTime = latestHistoryUpdated.appliedTo ?? currentTime;
+        const elapsed =
+          currentTime.getTime() - new Date(appliedToTime).getTime();
+        if (elapsed >= MS_IN_24H) {
+          // Close current hour history
+          latestHistoryUpdated.appliedTo = currentTime;
+          // Create new day history
+          const newHistory: PricingHistory = {
+            action: "CHANGE_TYPE",
+            priceType: "DAY",
+            amount: room.dayPrice || 0,
+            appliedFrom: currentTime,
+            appliedDayPrice: room.dayPrice,
+          };
+          typedBookingPricingUpdated.history.push(newHistory);
+          room.typeHire = typeHireMap[newPriceType];
+        } else {
+          latestHistoryUpdated.priceType = "DAY";
+          latestHistoryUpdated.amount = room.dayPrice || 0;
+          latestHistoryUpdated.appliedDayPrice = room.dayPrice;
+          latestHistoryUpdated.appliedFirstHourPrice = 0;
+          latestHistoryUpdated.appliedNextHourPrice = 0;
+          room.typeHire = typeHireMap[newPriceType];
+        }
       } else if (
         latestHistoryUpdated.priceType === "HOUR" &&
         newPriceType === "NIGHT"
       ) {
-        // Close current hour history
-        latestHistoryUpdated.appliedTo = currentTime;
+        const appliedFrom = latestHistoryUpdated.appliedFrom;
+        const sevenPM = new Date(appliedFrom);
+        sevenPM.setHours(19, 0, 0, 0);
 
-        // Create new night history
-        const newHistory: PricingHistory = {
-          action: "CHANGE_TYPE",
-          priceType: "NIGHT",
-          amount: room.nightPrice || 0,
-          appliedFrom: currentTime,
-          appliedNightPrice: room.nightPrice,
-        };
-        typedBookingPricingUpdated.history.push(newHistory);
+        if (appliedFrom < sevenPM && currentTime > sevenPM) {
+          // Case 1: Checkin trước 19h, đổi sau 19h
+          latestHistoryUpdated.appliedTo = sevenPM;
+
+          const newHistory: PricingHistory = {
+            action: "CHANGE_TYPE",
+            priceType: "NIGHT",
+            amount: room.nightPrice || 0,
+            appliedFrom: sevenPM,
+            appliedNightPrice: room.nightPrice,
+          };
+          typedBookingPricingUpdated.history.push(newHistory);
+        } else {
+          // Case 2: Checkin sau 19h (convert trực tiếp)
+          latestHistoryUpdated.priceType = "NIGHT";
+          latestHistoryUpdated.appliedNightPrice = room.nightPrice;
+          latestHistoryUpdated.amount = room.nightPrice || 0;
+
+          // Xoá thông tin giờ cũ nếu có
+          latestHistoryUpdated.appliedFirstHourPrice = 0;
+          latestHistoryUpdated.appliedNextHourPrice = 0;
+        }
+
         room.typeHire = typeHireMap[newPriceType];
       } else if (
         latestHistoryUpdated.priceType === "NIGHT" &&
@@ -1071,7 +1098,6 @@ export const changePriceType = async (
           }
         } else {
           // Đã đủ 24h → thực hiện logic chuyển sang DAY mới
-
           latestHistoryUpdated.priceType = "DAY";
           latestHistoryUpdated.appliedNightPrice = 0;
           latestHistoryUpdated.appliedDayPrice = room.dayPrice;
@@ -1240,7 +1266,6 @@ export const changePriceType = async (
       session.endSession();
     }
   }
-
   throw AppError.database("Failed to execute transaction after retries");
 };
 
