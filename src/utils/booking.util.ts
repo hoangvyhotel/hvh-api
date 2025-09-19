@@ -172,11 +172,12 @@ export const cacutaleNightAndUpdate = async (
     amount: 0, // sẽ update ngay bằng cacutaleHour
     appliedFrom: noonThreshold.toISOString(),
     appliedFirstHourPrice: room.originalPrice,
+    appliedNextHourPrice: room.afterHoursPrice,
   };
 
   nextHourHistory = cacutaleHour(
     nextHourHistory,
-    room.originalPrice,
+    room.afterHoursPrice,
     room.afterHoursPrice
   );
 
@@ -242,12 +243,13 @@ export const cacutaleDayAndUpdate = async (
     amount: 0, // tạm thời, sẽ update bằng cacutaleHour
     appliedFrom: nextDay.toISOString(),
     appliedFirstHourPrice: room.originalPrice,
+    appliedNextHourPrice: room.afterHoursPrice
   };
 
   // ✅ Tính tiền ngay bằng cacutaleHour
   nextHourHistory = cacutaleHour(
     nextHourHistory,
-    room.originalPrice,
+    room.afterHoursPrice,
     room.afterHoursPrice
   );
 

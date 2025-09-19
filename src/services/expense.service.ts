@@ -30,11 +30,8 @@ export const getAllExpenses = async (
   }
   const [year, month] = date.split("-").map(Number);
 
-const startDate = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
-const endDate = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
-
-  console.log("start", startDate);
-  console.log("end", endDate);
+  const startDate = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
+  const endDate = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
 
   const expenses = await expenseDb.getAllExpenses(id, startDate, endDate);
 
@@ -61,7 +58,11 @@ export const getMonthlyExpenseTotal = async (
   const startDate = new Date(Date.UTC(_year, _month - 1, 1, 0, 0, 0, 0));
   const endDate = new Date(Date.UTC(_year, _month, 0, 23, 59, 59, 999));
 
-  const total = await expenseDb.getMonthlyExpenseTotal(hotelId, startDate, endDate);
+  const total = await expenseDb.getMonthlyExpenseTotal(
+    hotelId,
+    startDate,
+    endDate
+  );
 
   return ResponseHelper.success(
     { total },
