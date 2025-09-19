@@ -104,7 +104,18 @@ export const cacutaleHour = (
   const firstHourPrice = originalPrice;
   const nextHourPrice = afterHoursPrice;
   let amount = firstHourPrice;
+  if (originalPrice === 0) {
+    const roundedExtraHours = Math.floor(hours / 0.2) * 0.2;
 
+    // tính tiền các giờ sau
+    amount += roundedExtraHours * nextHourPrice;
+    return {
+      ...historyPricing,
+      appliedFirstHourPrice: firstHourPrice,
+      appliedNextHourPrice: nextHourPrice,
+      amount: amount,
+    };
+  }
   if (hours > 1) {
     // số giờ vượt quá giờ đầu
     const extraHours = hours - 1;
@@ -171,14 +182,14 @@ export const cacutaleNightAndUpdate = async (
     priceType: "HOUR",
     amount: 0, // sẽ update ngay bằng cacutaleHour
     appliedFrom: noonThreshold.toISOString(),
-    appliedFirstHourPrice: room.originalPrice,
+    appliedFirstHourPrice: 0,
     appliedNextHourPrice: room.afterHoursPrice,
   };
 
   nextHourHistory = cacutaleHour(
     nextHourHistory,
-    room.afterHoursPrice,
-    room.afterHoursPrice
+    nextHourHistory.appliedNextHourPrice ?? 0,
+    nextHourHistory.appliedNextHourPrice ?? 0
   );
 
   bookingPricing.history.push(nextHourHistory as any);
@@ -242,15 +253,15 @@ export const cacutaleDayAndUpdate = async (
     priceType: "HOUR",
     amount: 0, // tạm thời, sẽ update bằng cacutaleHour
     appliedFrom: nextDay.toISOString(),
-    appliedFirstHourPrice: room.originalPrice,
-    appliedNextHourPrice: room.afterHoursPrice
+    appliedFirstHourPrice: 0,
+    appliedNextHourPrice: room.afterHoursPrice,
   };
 
   // ✅ Tính tiền ngay bằng cacutaleHour
   nextHourHistory = cacutaleHour(
     nextHourHistory,
-    room.afterHoursPrice,
-    room.afterHoursPrice
+    nextHourHistory.appliedNextHourPrice ?? 0,
+    nextHourHistory.appliedNextHourPrice ?? 0
   );
 
   bookingPricing.history.push(nextHourHistory as any);
@@ -306,6 +317,8 @@ export const updateSpecificHourHistory = async (
     };
   }
 
+  console.log("Updating HOUR history record:", historyRecord);
+
   // Lưu lại amount cũ để tính toán chênh lệch
   const oldAmount = historyRecord.amount || 0;
   // Tính toán amount mới
@@ -321,8 +334,8 @@ export const updateSpecificHourHistory = async (
       appliedDayPrice: historyRecord.appliedDayPrice,
       appliedNightPrice: historyRecord.appliedNightPrice,
     },
-    room.originalPrice,
-    room.afterHoursPrice
+    historyRecord.appliedFirstHourPrice || room.originalPrice,
+    historyRecord.appliedNextHourPrice || room.afterHoursPrice
   );
 
   // Tính chênh lệch a = amount_mới - amount_cũ
