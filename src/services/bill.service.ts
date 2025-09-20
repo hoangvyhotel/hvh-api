@@ -2,7 +2,6 @@ import * as db from "@/db/bill.db";
 import { AppError } from "@/utils/AppError";
 import { RoomModel } from "@/models/Room";
 import { Types } from "mongoose";
-import { CreateBillRequest } from "@/types/request/bill/CreateBillRequest.type";
 import { UpdateBillRequest } from "@/types/request/bill/UpdateBillRequest.type";
 import { IBill } from "@/models/Bill";
 import * as bookingDb from "@/db/booking.db";
@@ -291,12 +290,6 @@ export class BillService {
     ) {
       throw AppError.badRequest("totalRoomPrice phải là số");
     }
-    if (
-      update.totalUtilitiesPrice != null &&
-      typeof update.totalUtilitiesPrice !== "number"
-    ) {
-      throw AppError.badRequest("totalUtilitiesPrice phải là số");
-    }
 
     const toUpdate: any = { ...update };
     if (toUpdate.createdAt)
@@ -333,6 +326,7 @@ export class BillService {
       db.getBillsByHotelId(hotelId, dateStr!),
     ]);
 
+    console.log("bills", bills);
     // Gộp bookings và bills thành một mảng
     // Thêm field 'type' để phân biệt
     const bookingsWithType = bookings.map((booking: any) => ({
@@ -349,7 +343,7 @@ export class BillService {
       (a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
-
+console.log("allRecords", allRecords);
     return allRecords;
   }
 }

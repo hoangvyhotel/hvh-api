@@ -104,11 +104,10 @@ export const cacutaleHour = (
   const firstHourPrice = originalPrice;
   const nextHourPrice = afterHoursPrice;
   let amount = firstHourPrice;
-  if (originalPrice === 0) {
-    const roundedExtraHours = Math.floor(hours / 0.2) * 0.2;
+  const roundedHours = Math.ceil(hours);
 
-    // tính tiền các giờ sau
-    amount += roundedExtraHours * nextHourPrice;
+  if (originalPrice === 0) {
+    amount = roundedHours * nextHourPrice;
     return {
       ...historyPricing,
       appliedFirstHourPrice: firstHourPrice,
@@ -116,15 +115,10 @@ export const cacutaleHour = (
       amount: amount,
     };
   }
-  if (hours > 1) {
-    // số giờ vượt quá giờ đầu
-    const extraHours = hours - 1;
-
-    // làm tròn xuống theo block 0.2 giờ
-    const roundedExtraHours = Math.floor(extraHours / 0.2) * 0.2;
-
-    // tính tiền các giờ sau
-    amount += roundedExtraHours * nextHourPrice;
+  if (roundedHours <= 1) {
+    amount = firstHourPrice; // nếu <= 1h thì tính giá giờ đầu
+  } else {
+    amount = firstHourPrice + (roundedHours - 1) * nextHourPrice;
   }
 
   return {

@@ -48,10 +48,16 @@ export class AuthService {
     if (!isPasswordValid) {
       throw AppError.unauthorized("Mật khẩu không đúng");
     }
+    const hotel = await HotelModel.findById(user.hotelId);
+    if (!hotel) {
+      throw AppError.notFound("Khách sạn không tồn tại");
+    }
+    console.log("Hotel found for user:", hotel.name);
     const userInfo: UserInfo = {
       id: (user._id as Types.ObjectId).toString(),
       userName: user.username,
       role: user.role,
+      hotelName: hotel.name,
       hotelId: (user.hotelId as Types.ObjectId)?.toString(),
     };
 
@@ -62,7 +68,7 @@ export class AuthService {
       user: userInfo,
       tokens,
     };
-  };
+  }
 
   async register(credentials: RegisterRequest): Promise<RegisterResponse> {
     const { username, password, passwordManage, hotelName } = credentials.body;

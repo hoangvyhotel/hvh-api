@@ -1,6 +1,7 @@
 export interface UpdatePrice {
   roomId: string;
   newPrice: number;
+  newNextHourPrice?: number;
 }
 
 export interface UpdateRangePrice {

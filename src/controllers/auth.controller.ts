@@ -27,6 +27,7 @@ export const login = catchAsyncErrorWithCode(
         username: user.userName,
         role: user.role,
         hotelId: user.hotelId,
+        hotelName: user.hotelName,
       };
 
       res.status(200).json(ResponseHelper.success({ user: payload }, "Login successful", "LOGIN_SUCCESS"));

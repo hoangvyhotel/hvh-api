@@ -156,9 +156,12 @@ export const updateRangePrice = async (
   const { data, typePrice } = req.body;
 
   let fieldName = "";
+  let fieldName_original: string | null = null;
+
   switch (typePrice) {
     case "hours":
       fieldName = "afterHoursPrice";
+      fieldName_original = "originalPrice";
       break;
     case "day":
       fieldName = "dayPrice";
@@ -175,9 +178,11 @@ export const updateRangePrice = async (
   if (existing.length !== roomIds.length) {
     throw AppError.badRequest("Yêu cầu không hợp lệ!");
   }
-  await roomDb.updateRangePrice(data, fieldName);
+
+  await roomDb.updateRangePrice(data, fieldName, fieldName_original);
   return ResponseHelper.success(null, "Cập nhật thành công");
 };
+
 
 export const getRoomAvailable = async (
   req: QueryRequest<{ roomId: string; hotelId: string }>

@@ -63,18 +63,30 @@ export async function del(id: string) {
 
 export const updateRangePrice = async (
   data: UpdatePrice[],
-  fieldName: string
+  fieldName: string,
+  fieldName_original?: string | null
 ) => {
-  const bulkOps = data.map((item) => ({
-    updateOne: {
-      filter: { _id: item.roomId },
-      update: { $set: { [fieldName]: item.newPrice } },
-    },
-  }));
+  const bulkOps = data.map((item) => {
+    const updateSet: Record<string, any> = {
+      [fieldName]: item.newPrice,
+    };
 
-  const result = await RoomModel.bulkWrite(bulkOps);
-  return result;
+    // chỉ thêm original nếu type = hours
+    if (fieldName_original && item.newNextHourPrice !== undefined) {
+      updateSet[fieldName_original] = item.newNextHourPrice;
+    }
+
+    return {
+      updateOne: {
+        filter: { _id: item.roomId },
+        update: { $set: updateSet },
+      },
+    };
+  });
+
+  return RoomModel.bulkWrite(bulkOps);
 };
+
 
 export const existingRooms = async (ids: string[]) => {
   return await RoomModel.find({ _id: { $in: ids } }).select("_id");

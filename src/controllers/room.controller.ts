@@ -24,7 +24,7 @@ export const createRoom = catchAsyncError(
     const roomData: CreateRoomRequest = req.body;
 
     // Validate required fields
-    if (!roomData.floor || !roomData.originalPrice || !roomData.hotelId) {
+    if (roomData.floor < 0 || !roomData.originalPrice || !roomData.hotelId) {
       return next(new AppError("Thiếu thông tin bắt buộc", 400));
     }
 
