@@ -1,0 +1,212 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum PricingAction {
+  CREATE
+  CHANGE_TYPE
+  DISCOUNT
+  PREPAID
+  NEGOTIATE
+  SURCHARGE
+  CHANGE_ROOM
+}
+
+model Hotel {
+  id        Int        @id @default(autoincrement())
+  name      String
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  rooms     Room[]
+  utilities Utility[]
+  users     User[]
+  expenses  Expenses[]
+  bills     Bill[]
+
+  @@map("hotel")
+}
+
+model Room {
+  id               Int                 @id @default(autoincrement())
+  floor            Int
+  name             String
+  originalPrice    Float
+  afterHoursPrice  Float
+  dayPrice         Float
+  nightPrice       Float
+  description      String?
+  typeHire         Int                 @default(0)
+  status           Boolean
+  hotelId          Int
+  hotel            Hotel               @relation(fields: [hotelId], references: [id])
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  bookings         Booking[]
+  bills            Bill[]
+  bookingPricings  BookingPricing[]
+
+  @@index([hotelId])
+  @@map("room")
+}
+
+model User {
+  id              Int      @id @default(autoincrement())
+  username        String   @unique
+  password        String
+  passwordManage  String
+  role            String
+  hotelId         Int
+  hotel           Hotel    @relation(fields: [hotelId], references: [id])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Utility {
+  id        Int      @id @default(autoincrement())
+  name      String
+  price     Float
+  icon      String?
+  status    Boolean  @default(true)
+  hotelId   Int
+  hotel     Hotel    @relation(fields: [hotelId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bookingItems BookingItem[]
+
+  @@index([hotelId])
+  @@unique([hotelId, name])
+  @@map("utility")
+}
+
+model Booking {
+  id           Int            @id @default(autoincrement())
+  roomId       Int
+  room         Room           @relation(fields: [roomId], references: [id])
+  checkin      DateTime
+  checkout     DateTime?
+  documentInfo Json?          @default("{}")
+  carInfo      Json?          @default("{}")
+  surcharge    Json?          @default("{}")
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  items        BookingItem[]
+  note         Note?
+  bookingPricings BookingPricing[]
+
+  @@index([roomId, checkin])
+  @@map("booking")
+}
+
+model Note {
+  id                Int      @id @default(autoincrement())
+  Content           String?
+  Discount          Float    @default(0)
+  PayInAdvance      Float    @default(0)
+  NegotiatedPrice   Float?
+  BookingPricingId  String?
+
+  bookingId         Int      @unique
+  booking           Booking  @relation(fields: [bookingId], references: [id])
+  
+  @@map("note")
+}
+
+model BookingItem {
+  id           Int      @id @default(autoincrement())
+  utilitiesId  Int
+  utility      Utility  @relation(fields: [utilitiesId], references: [id])
+  quantity     Int
+  price        Float?
+  name         String?
+  bookingId    Int
+  booking      Booking  @relation(fields: [bookingId], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([utilitiesId])
+  @@index([bookingId])
+  @@map("bookingitem")
+}
+
+model BookingPricing {
+  id               Int              @id @default(autoincrement())
+  bookingId        Int
+  booking          Booking          @relation(fields: [bookingId], references: [id])
+  roomId           Int?
+  room             Room?            @relation(fields: [roomId], references: [id])
+  priceType        String
+  startTime        DateTime
+  endTime          DateTime?
+  calculatedAmount Float
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  history          PricingHistory[]
+
+  @@index([bookingId])
+  @@index([roomId])
+  @@map("bookingpricing")
+}
+
+model PricingHistory {
+  id                    Int            @id @default(autoincrement())
+  action                PricingAction
+  priceType             String?
+  amount                Float?
+  description           String?
+  appliedFrom           DateTime       @default(now())
+  appliedTo             DateTime?
+  appliedFirstHourPrice Float          @default(0)
+  appliedNextHourPrice  Float          @default(0)
+  appliedDayPrice       Float          @default(0)
+  appliedNightPrice     Float          @default(0)
+
+  bookingPricingId      Int
+  bookingPricing        BookingPricing @relation(fields: [bookingPricingId], references: [id])
+  
+  @@map("pricinghistory")  
+}
+
+model Bill {
+  id                   Int      @id @default(autoincrement())
+  totalRoomPrice       Float
+  totalUtilitiesPrice  Float
+  roomId               Int
+  room                 Room     @relation(fields: [roomId], references: [id])
+  hotelId              Int
+  hotel                Hotel    @relation(fields: [hotelId], references: [id])
+  checkIn              DateTime
+  checkOut             DateTime
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([roomId])
+  @@index([hotelId])
+  @@map("bill")
+}
+
+model Expenses {
+  id        Int      @id @default(autoincrement())
+  date      DateTime
+  amount    Float
+  reason    String
+  note      String   @default("")
+  hotelId   Int
+  hotel     Hotel    @relation(fields: [hotelId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("expenses")
+}

@@ -1,5 +1,6 @@
 export interface UpdateRoomRequest {
   floor?: number;
+  name?: string;
   originalPrice?: number;
   afterHoursPrice?: number;
   dayPrice?: number;

@@ -1,4 +1,5 @@
-import BookingItem from "@/models/BookingItem";
+import { PrismaClient } from "../generated/prisma";
+const prisma = new PrismaClient();
 
 // export const saveBookingItem = async (data: BookingItemRequest) => {
 //   const newBookingItem = BookingItem.create(data);
@@ -11,6 +12,8 @@ import BookingItem from "@/models/BookingItem";
 // };
 
 export const getBookingItemsByBookingId = async (bookingId: string) => {
-  const bookingItems = BookingItem.find({ bookingId }).lean();
-  return bookingItems;
+  return prisma.bookingItem.findMany({
+    where: { bookingId: Number(bookingId) },
+    orderBy: { createdAt: "desc" },
+  });
 };

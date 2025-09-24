@@ -8,4 +8,6 @@ export interface CreateRoomRequest {
   typeHire: number; // Assuming this is an enum or a specific set of values
   hotelId: string; // Reference to the Hotel model, should be a valid ObjectId string
   status: boolean; // true for available, false for not available
+  name: string;
+
 }

@@ -112,7 +112,7 @@ export const updateBill = catchAsyncErrorWithCode(
   async (req: BodyRequest<UpdateBillRequest>, res: Response) => {
     const id = (req as any).params.id as string;
     const payload = req.body as UpdateBillRequest;
-    const updated = await service.updateBill(id, payload);
+    const updated = await service.updateBill(Number(id), payload);
     res
       .status(200)
       .json(ResponseHelper.success(updated, "Cập nhật hoá đơn thành công"));
@@ -123,7 +123,7 @@ export const updateBill = catchAsyncErrorWithCode(
 export const deleteBill = catchAsyncErrorWithCode(
   async (req: ParamsRequest<{ id: string }>, res: Response) => {
     const id = req.params.id;
-    const deleted = await service.deleteBill(id);
+    const deleted = await service.deleteBill(Number(id));
     res
       .status(200)
       .json(ResponseHelper.success(deleted, "Xoá hoá đơn thành công"));
@@ -141,7 +141,7 @@ export const listBills = catchAsyncErrorWithCode(
   ) => {
     const hotelId = req.params.hotelId;
     const date = req.params.date;
-    const bills = await service.listBills(hotelId, date);
+    const bills = await service.listBills(Number(hotelId), date);
 
     res
       .status(200)

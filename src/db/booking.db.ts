@@ -1,28 +1,23 @@
-import mongoose, { Types } from "mongoose";
-import { RoomModel, IRoomDocument } from "@/models/Room";
-import Booking, { IBooking } from "@/models/Booking";
-import { IUtility } from "@/models/Utility";
-import { ParamsRequest } from "@/types/request/base";
-import { AppError } from "@/utils/AppError";
-import { GetBookingInfo, Note, Surcharge } from "@/types/response/booking";
-import BookingPricing, {
-  BookingPricingDocument,
-  PricingHistory,
-} from "@/models/BookingPricing";
-import { PricingHistoryData } from "@/types/response/bookingPricing";
+import { ParamsRequest } from "@/types/request";
 import { TYPE_BOOKINGS } from "@/constant/constant";
-import { calculateAndUpdatePricing } from "@/utils/booking.util";
+import { PrismaClient } from "../generated/prisma";
+import { BookingPricing, GetBookingInfo, Note } from "@/types/response/booking";
+import { AppError } from "@/utils/AppError";
+import { calculateAndUpdatePricing } from "@/utils/booking-prisma.util";
+import { $Enums, PricingHistory } from "@/generated/prisma";
+const prisma = new PrismaClient();
 
 type UtilitiesForBooking = {
   Quantity: number;
   Icon: string;
 };
+
 export interface PricingData {
-  _id: Types.ObjectId;
+  id: string;
   priceType: string;
   startTime: Date;
   endTime?: Date;
-  room: IRoomDocument;
+  room: any; // bạn có thể thay bằng type Room nếu cần
   appliedFirstHourPrice: number;
   appliedNextHourPrice: number;
   appliedDayPrice: number;
@@ -45,415 +40,407 @@ export interface GetRoomsByHotel {
   RoomId: string;
 }
 
+/**
+ * Lấy danh sách phòng của khách sạn kèm booking hiện tại
+ */
 export const getRoomsByHotel = async (
   req: ParamsRequest<{ id: string }>
 ): Promise<GetRoomsByHotel[]> => {
   const { id } = req.params;
-  console.log("id", id);
 
-  // 1. Lấy tất cả phòng của khách sạn
-  const rooms: IRoomDocument[] = await RoomModel.find({
-    hotelId: new mongoose.Types.ObjectId(id),
-    status: true,
+  // 1. Lấy tất cả phòng của khách sạn (status = true)
+  const rooms = await prisma.room.findMany({
+    where: {
+      hotelId: Number(id),
+      status: true,
+    },
   });
 
-  const roomIds = rooms.map((r) => new mongoose.Types.ObjectId(r._id));
+  const roomIds = rooms.map((r: { id: any }) => r.id);
 
-  // 2. Lấy các booking có roomId trong danh sách
-  const bookings = await Booking.find({
-    roomId: { $in: roomIds },
-  })
-    .populate("items.utilitiesId") // populate utilities
-    .lean<IBooking[]>(); // lấy plain object thay vì Document
+  // 2. Lấy các booking hiện tại (chưa checkout) của các room đó
+  const bookings = await prisma.booking.findMany({
+    where: {
+      roomId: { in: roomIds },
+      // giả sử logic: booking chưa checkout
+      checkout: null,
+    },
+    include: {
+      items: {
+        include: {
+          utility: true, // join utility table
+        },
+      },
+    },
+  });
 
   // 3. Map roomId -> booking hiện tại
-  const bookingMap: Record<string, IBooking | undefined> = {};
+  const bookingMap: Record<string, (typeof bookings)[number] | undefined> = {};
   bookings.forEach((b) => {
-    bookingMap[b.roomId.toString()] = b;
+    bookingMap[b.roomId] = b;
   });
 
   // 4. Build dữ liệu trả về
-  const data: GetRoomsByHotel[] = rooms.map((room) => {
-    const booking = bookingMap[room._id.toString()];
+  return rooms.map(
+    (room: {
+      id: string | number;
+      typeHire: number;
+      name: any;
+      description: any;
+      floor: any;
+    }) => {
+      const booking = bookingMap[room.id];
 
-    const typeBooking =
-      room.typeHire === 1
-        ? TYPE_BOOKINGS.HOUR
-        : room.typeHire === 2
-        ? TYPE_BOOKINGS.NIGHT
-        : room.typeHire === 3
-        ? TYPE_BOOKINGS.DAY
-        : TYPE_BOOKINGS.HOUR;
+      const typeBooking =
+        room.typeHire === 1
+          ? TYPE_BOOKINGS.HOUR
+          : room.typeHire === 2
+          ? TYPE_BOOKINGS.NIGHT
+          : room.typeHire === 3
+          ? TYPE_BOOKINGS.DAY
+          : TYPE_BOOKINGS.HOUR;
 
-    return {
-      HotelId: id,
-      RoomId: room._id.toString(),
-      RoomName: room.name,
-      Status: booking ? "CHECKIN" : "FREE",
-      TypeBooking: typeBooking,
-      Utilities: booking
-        ? (booking.items ?? []).map((item) => ({
-            Quantity: item.quantity,
-            Icon: (item.utilitiesId as any)?.icon || "",
-          }))
-        : undefined,
-      Description: room.description,
-      Floor: room.floor,
-      Checkin: booking?.checkin,
-    };
+      return {
+        HotelId: id,
+        RoomId: room.id.toString(),
+        RoomName: room.name,
+        Status: booking ? "CHECKIN" : "FREE",
+        TypeBooking: typeBooking,
+        Utilities: booking
+          ? booking.items.map(
+              (item: { quantity: any; utility: { icon: any } }) => ({
+                Quantity: item.quantity,
+                Icon: item.utility?.icon ?? "",
+              })
+            )
+          : undefined,
+        Description: room.description ?? undefined,
+        Floor: room.floor ?? 0,
+        Checkin: booking?.checkin ?? undefined,
+      };
+    }
+  );
+};
+
+/**
+ * Lấy toàn bộ booking (populate room)
+ */
+export const getBookings = async () => {
+  return prisma.booking.findMany({
+    include: {
+      room: true,
+      items:true
+    },
   });
-
-  return data;
 };
 
-export const getBookings = async (): Promise<IBooking[]> => {
-  return await Booking.find({}).populate("roomId").exec();
-};
-
+/**
+ * Tạo mới 1 booking cho room
+ */
 export const AddBooking = async (
   roomId: string,
-  session?: any
-): Promise<any> => {
-  if (!Types.ObjectId.isValid(roomId)) {
-    throw AppError.badRequest("ID phòng không hợp lệ");
-  }
+  tx?: Parameters<typeof prisma.$transaction>[0]
+) => {
   try {
-    const booking = await Booking.create(
-      [
-        {
-          roomId: new Types.ObjectId(roomId),
-          checkin: new Date(),
-        },
-      ],
-      { session } // truyền session vào đây
-    );
-    return booking[0];
+    const booking = await prisma.booking.create({
+      data: {
+        roomId: Number(roomId),
+        checkin: new Date(),
+      },
+    });
+    return booking;
   } catch (error) {
     console.error("Lỗi khi tạo booking:", error);
     throw AppError.internal("Không thể tạo booking");
   }
 };
+//sử dụng mongoose
 
 export const getBookingInfo = async (
   req: ParamsRequest<{ roomId: string }>
 ): Promise<GetBookingInfo> => {
   const { roomId } = req.params;
-  const roomObjectId = new Types.ObjectId(roomId);
 
-  const pipeline = [
-    { $match: { roomId: roomObjectId } },
-    {
-      $lookup: {
-        from: "rooms",
-        localField: "roomId",
-        foreignField: "_id",
-        as: "room",
+  const booking = await prisma.booking.findFirst({
+    where: { roomId: Number(roomId) },
+    include: {
+      room: true,
+      note: true,
+      items: {
+        include: { utility: true }, // utilities liên kết qua foreign key
+      },
+      bookingPricings: {
+        include: { history: true },
+        orderBy: { createdAt: "desc" },
+        take: 1, // chỉ lấy cái mới nhất
       },
     },
-    { $unwind: "$room" },
-    {
-      $lookup: {
-        from: "utilities",
-        localField: "items.utilitiesId",
-        foreignField: "_id",
-        as: "utilitiesData",
-      },
-    },
-    {
-      $lookup: {
-        from: "bookingpricings",
-        let: { bookingId: "$_id" },
-        pipeline: [
-          {
-            $match: {
-              $expr: { $eq: ["$bookingId", "$$bookingId"] },
-            },
-          },
-          {
-            $project: {
-              _id: 1,
-              priceType: 1,
-              startTime: 1,
-              endTime: 1,
-              calculatedAmount: 1,
-              history: 1,
-            },
-          },
-        ],
-        as: "bookingPricings",
-      },
-    },
-    {
-      $addFields: {
-        Utilities: {
-          $map: {
-            input: "$items",
-            as: "it",
-            in: {
-              _id: "$$it.utilitiesId",
-              Name: "$$it.name",
-              Quantity: "$$it.quantity",
-              Price: "$$it.price",
-              Icon: {
-                $let: {
-                  vars: {
-                    util: {
-                      $arrayElemAt: [
-                        {
-                          $filter: {
-                            input: "$utilitiesData",
-                            as: "u",
-                            cond: { $eq: ["$$u._id", "$$it.utilitiesId"] },
-                          },
-                        },
-                        0,
-                      ],
-                    },
-                  },
-                  in: "$$util.icon",
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-    {
-      $project: {
-        BookingId: { $toString: "$_id" },
-        RoomName: { $ifNull: ["$room.name", "Phòng không xác định"] },
-        TypeHire: "$room.typeHire",
-        documentInfo: 1,
-        checkin: 1,
-        carInfo: 1,
-        surcharge: 1,
-        note: 1,
-        Utilities: 1,
-        BookingPricing: "$bookingPricings",
-      },
-    },
-  ];
+  });
 
-  const result = await Booking.aggregate(pipeline).exec();
-  if (!result || result.length === 0) {
+  if (!booking) {
     throw new Error("Không tìm thấy booking cho roomId này");
   }
 
-  const b = result[0];
-
-  // Cập nhật giá cho bản ghi lịch sử mới nhất của BookingPricing duy nhất
-  if (
-    b.BookingPricing &&
-    b.BookingPricing.length > 0 &&
-    b.BookingPricing[0]._id
-  ) {
-    const bp = b.BookingPricing[0]; // Lấy BookingPricing duy nhất
-    if (
-      bp.history &&
-      bp.history.length > 0 &&
-      bp.history[bp.history.length - 1]._id
-    ) {
-      const latestHistory = bp.history[bp.history.length - 1]; // Lấy bản ghi lịch sử cuối cùng
-      const bookingPricingId = bp._id.toString();
-      const historyId = latestHistory._id.toString();
-
+  const bp = booking.bookingPricings[0];
+  if (bp?.id && bp.history.length > 0) {
+    const latestHistory = bp.history[bp.history.length - 1];
+    if (latestHistory?.id) {
       try {
-        // Gọi calculateAndUpdatePricing cho bản ghi lịch sử mới nhất
-        await calculateAndUpdatePricing(bookingPricingId, historyId, roomId);
+        await calculateAndUpdatePricing(
+          bp.id.toString(),
+          latestHistory.id.toString(),
+          roomId.toString()
+        );
 
-        // Chạy lại pipeline để lấy dữ liệu BookingPricing đã cập nhật
-        const updatedResult = await Booking.aggregate(pipeline).exec();
-        if (updatedResult && updatedResult.length > 0) {
-          b.BookingPricing = updatedResult[0].BookingPricing;
-        }
+        // reload bookingPricings
+        const updated = await prisma.bookingPricing.findUnique({
+          where: { id: bp.id },
+          include: { history: true },
+        });
+        if (updated) booking.bookingPricings[0] = updated;
       } catch (error) {
         console.error(
-          `Lỗi khi cập nhật giá cho bookingPricingId: ${bookingPricingId}, historyId: ${historyId}`,
+          `Lỗi khi cập nhật giá cho bookingPricingId: ${bp.id}, historyId: ${latestHistory.id}`,
           error
         );
-        // Tiếp tục thực thi mà không ném lỗi
       }
-    } else {
-      console.warn(
-        `Không tìm thấy history hoặc history._id cho BookingPricing: ${bp._id}`
-      );
     }
-  } else {
-    console.warn(
-      `Không tìm thấy BookingPricing hoặc BookingPricing._id cho roomId: ${roomId}`
-    );
   }
 
-  // Hàm tính số giờ và làm tròn đến 1 chữ số sau dấu phẩy
-  const calculateHours = (
-    start: string | Date,
-    end?: string | Date
-  ): number => {
+  const calculateHours = (start: Date | null, end?: Date | null): number => {
     if (!start) return 0;
     const startDate = new Date(start);
-    // Nếu không có end, sử dụng thời điểm hiện tại
     const endDate = end ? new Date(end) : new Date();
-    // Kiểm tra tính hợp lệ của ngày
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return 0;
     const hours = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60);
-    return Math.round(hours * 10) / 10; // Làm tròn đến 1 chữ số sau dấu phẩy
+    return Math.round(hours * 10) / 10;
   };
 
-  // Tính tổng số giờ của booking từ CheckinDate đến thời điểm hiện tại
-  const totalHours = calculateHours(b.checkin, undefined);
+  const totalHours = calculateHours(booking.checkin);
 
-  // Tính tổng tiền utilities: quantity * price cho từng item
-  let totalAmountUtilities = 0;
-  if (b.Utilities && Array.isArray(b.Utilities)) {
-    totalAmountUtilities = b.Utilities.reduce((sum: number, u: any) => {
-      const qty = typeof u.Quantity === "number" ? u.Quantity : 0;
-      const price = typeof u.Price === "number" ? u.Price : 0;
+  const totalAmountUtilities = booking.items.reduce(
+    (sum: number, it: { quantity?: number; price?: number | null }) => {
+      const qty = typeof it.quantity === "number" ? it.quantity : 0;
+      const price = typeof it.price === "number" ? it.price : 0;
       return sum + qty * price;
-    }, 0);
-  }
+    },
+    0
+  );
 
   return {
-    BookingId: b.BookingId,
-    RoomName: b.RoomName,
+    BookingId: booking.id.toString(),
+    RoomName: booking.room?.name ?? "Phòng không xác định",
     TypeBooking:
-      b.TypeHire === 1
+      booking.room?.typeHire === 1
         ? TYPE_BOOKINGS.HOUR
-        : b.TypeHire === 2
+        : booking.room?.typeHire === 2
         ? TYPE_BOOKINGS.NIGHT
-        : b.TypeHire === 3
+        : booking.room?.typeHire === 3
         ? TYPE_BOOKINGS.DAY
         : TYPE_BOOKINGS.HOUR,
-    CheckinDate: b.checkin,
+    CheckinDate: booking.checkin,
     Times: totalHours,
     TotalAmountUtilities: totalAmountUtilities,
-    Utilities: b.Utilities ?? [],
-    Documents: (b.documentInfo ?? []).map((doc: any) => ({
-      ID: doc.ID || "",
-      TypeID: doc.TypeID || "CCCD",
-      FullName: doc.FullName || "",
-      Address: doc.Address || "",
-      BirthDay: doc.BirthDay || "",
-      Gender: doc.Gender || false,
-      EthnicGroup: doc.EthnicGroup || "",
+    Utilities: booking.items.map((it) => ({
+      _id: it.utility.id,
+      Name: it.utility.name,
+      Quantity: it.quantity,
+      Price: typeof it.price === "number" ? it.price : undefined, // đảm bảo không phải null
+      Icon: it.utility?.icon ?? "",
     })),
-    CarInfos: (b.carInfo ?? []).map((c: any) => ({
-      LicensePlate: c.LicensePlate || "",
-    })),
-    Surcharge: (b.surcharge ?? []).map((s: any) => ({
-      Content: s.Content || "",
-      Amount: s.Amount || 0,
-    })),
-    Notes: b.note
+    Documents: Array.isArray(booking.documentInfo)
+      ? (booking.documentInfo as any[]).map((doc) => ({
+          ID: doc.ID || "",
+          TypeID: doc.TypeID || "CCCD",
+          FullName: doc.FullName || "",
+          Address: doc.Address || "",
+          BirthDay: doc.BirthDay || "",
+          Gender: doc.Gender ?? false,
+          EthnicGroup: doc.EthnicGroup || "",
+        }))
+      : [],
+    CarInfos: Array.isArray(booking.carInfo)
+      ? (booking.carInfo as any[]).map((c) => ({
+          LicensePlate: c.LicensePlate || "",
+        }))
+      : [],
+    Surcharge: Array.isArray(booking.surcharge)
+      ? (booking.surcharge as any[]).map((s) => ({
+          Content: s.Content || "",
+          Amount: s.Amount || 0,
+        }))
+      : [],
+    Notes: booking.note
       ? {
-          Content: b.note.Content || "",
-          Discount: b.note.Discount || 0,
-          PayInAdvance: b.note.PayInAdvance || 0,
-          NegotiatedPrice: b.note.NegotiatedPrice || 0,
+          Content: booking.note.Content || "",
+          Discount: booking.note.Discount || 0,
+          PayInAdvance: booking.note.PayInAdvance || 0,
+          NegotiatedPrice: booking.note.NegotiatedPrice || 0,
         }
       : undefined,
-    BookingPricing: (b.BookingPricing ?? []).map((bp: any) => ({
+    BookingPricing: booking.bookingPricings.map<BookingPricing>((bp) => ({
       PriceType: bp.priceType,
-      StartDate: bp.startTime,
-      EndDate: bp.endTime,
+      StartDate: bp.startTime.toISOString(),
+      EndDate: bp.endTime?.toISOString(),
       CalculatedAmount: bp.calculatedAmount,
-      History: (bp.history ?? []).map((h: any) => ({
-        Action: h.action,
-        PriceType: h.priceType,
-        Amount: h.amount,
-        Description: h.description,
-        AppliedFrom: h.appliedFrom,
-        AppliedTo: h.appliedTo,
-        AppliedFirstHourPrice: h.appliedFirstHourPrice,
-        AppliedNextHourPrice: h.appliedNextHourPrice,
-        AppliedDayPrice: h.appliedDayPrice,
-        AppliedNightPrice: h.appliedNightPrice,
+      History: bp.history.map((h) => ({
+        action: h.action, // viết thường
+        priceType: h.priceType ?? undefined,
+        amount: h.amount ?? undefined,
+        description: h.description ?? undefined,
+        appliedFrom: h.appliedFrom.toISOString(), // convert Date -> string
+        appliedTo: h.appliedTo?.toISOString(), // convert Date -> string
+        appliedFirstHourPrice: h.appliedFirstHourPrice,
+        appliedNextHourPrice: h.appliedNextHourPrice,
+        appliedDayPrice: h.appliedDayPrice,
+        appliedNightPrice: h.appliedNightPrice,
         Times: calculateHours(h.appliedFrom, h.appliedTo),
       })),
     })),
   };
 };
 
-export const addSurcharge = async (surcharge: Surcharge) => {
-  const booking = await Booking.findById(surcharge.BookingId);
+// =================== ADD SURCHARGE ===================
+export const addSurcharge = async (surcharge: {
+  BookingId: string;
+  Content: string;
+  Amount: number;
+}) => {
+  const booking = await prisma.booking.findUnique({
+    where: { id: Number(surcharge.BookingId) },
+  });
+
   if (!booking) {
     throw AppError.notFound("Không tìm thấy booking!");
   }
 
-  // Thêm surcharge vào booking
-  const surchargeBooking: Surcharge = {
-    Content: surcharge.Content,
-    Amount: surcharge.Amount,
-  };
+  // Lấy danh sách surcharge hiện tại từ JSON
+  const currentSurcharge: { Content: string; Amount: number }[] = Array.isArray(
+    booking.surcharge
+  )
+    ? booking.surcharge.filter(
+        (s): s is { Content: string; Amount: number } =>
+          s !== null &&
+          typeof s === "object" &&
+          typeof (s as any).Content === "string" &&
+          typeof (s as any).Amount === "number"
+      )
+    : [];
 
-  booking.surcharge?.push(surchargeBooking);
-  await booking.save();
-  console.log();
-  const bookingPricing = await BookingPricing.findOne({
-    bookingId: surcharge.BookingId,
+  // Thêm surcharge mới
+  const updatedSurcharge = [
+    ...currentSurcharge,
+    { Content: surcharge.Content, Amount: surcharge.Amount },
+  ];
+
+  // Cập nhật vào DB
+  const updatedBooking = await prisma.booking.update({
+    where: { id: Number(surcharge.BookingId) },
+    data: {
+      surcharge: updatedSurcharge,
+    },
+  });
+
+  // Nếu bạn muốn cập nhật bookingPricing
+  const bookingPricing = await prisma.bookingPricing.findFirst({
+    where: { bookingId: Number(surcharge.BookingId) },
+  });
+
+  if (!bookingPricing) {
+    throw AppError.notFound("Không tìm thấy thông tin giá cho booking!");
+  }
+
+  const updatedBookingPricing = await prisma.bookingPricing.update({
+    where: { id: bookingPricing.id },
+    data: {
+      calculatedAmount:
+        (bookingPricing.calculatedAmount || 0) + surcharge.Amount,
+    },
+  });
+
+  return {
+    booking: updatedBooking,
+    bookingPricing: updatedBookingPricing,
+  };
+};
+
+// =================== ADD NOTE ===================
+export const addNote = async (
+  bookingId: string,
+  note: { Discount?: number; PayInAdvance?: number; NegotiatedPrice?: number }
+) => {
+  const booking = await prisma.booking.findUnique({
+    where: { id: Number(bookingId) },
+    include: { note: true, items: true },
+  });
+  if (!booking) throw AppError.notFound("Không tìm thấy booking!");
+
+  const bookingPricing = await prisma.bookingPricing.findFirst({
+    where: { bookingId: Number(bookingId) },
+    include: { history: true },
   });
   if (!bookingPricing) {
     throw AppError.notFound("Không tìm thấy thông tin giá cho booking!");
   }
 
-  bookingPricing.calculatedAmount =
-    (bookingPricing.calculatedAmount || 0) + surcharge.Amount!;
-
-  await bookingPricing.save();
-
-  return {
-    booking,
-    bookingPricing,
-  };
-};
-
-export const addNote = async (bookingId: string, note: Note) => {
-  const booking = await Booking.findById(bookingId);
-  if (!booking) throw AppError.notFound("Không tìm thấy booking!");
-
-  const bookingPricing = await BookingPricing.findOne({ bookingId });
-  if (!bookingPricing)
-    throw AppError.notFound("Không tìm thấy thông tin giá cho booking!");
-
-  // Lưu ghi chú
-  booking.note = note;
-  await booking.save();
+  // --- Lưu ghi chú ---
+  let noteRecord;
+  if (booking.note) {
+    // update note nếu đã tồn tại
+    noteRecord = await prisma.note.update({
+      where: { id: booking.note.id },
+      data: { ...note },
+    });
+  } else {
+    // tạo note mới
+    noteRecord = await prisma.note.create({
+      data: {
+        ...note,
+        bookingId: Number(bookingId),
+      },
+    });
+  }
 
   // --- CẬP NHẬT GIÁ LỊCH SỬ MỚI NHẤT ---
-  if (bookingPricing.history && bookingPricing.history.length > 0) {
+  if (bookingPricing.history.length > 0) {
     const latestHistory =
       bookingPricing.history[bookingPricing.history.length - 1];
-    if (latestHistory._id && bookingPricing._id) {
-      try {
-        // Gọi calculateAndUpdatePricing cho lịch sử mới nhất
-        await calculateAndUpdatePricing(
-          bookingPricing._id.toString(),
-          latestHistory._id.toString(),
-          booking.roomId?.toString() || "" // nếu cần roomId
-        );
-
-        // Reload bookingPricing sau khi cập nhật
-        const updated = await BookingPricing.findById(bookingPricing._id);
-        if (updated) Object.assign(bookingPricing, updated);
-      } catch (error) {
-        console.error(
-          `Lỗi khi cập nhật giá cho bookingPricingId: ${bookingPricing._id}, historyId: ${latestHistory._id}`,
-          error
-        );
-      }
+    try {
+      await calculateAndUpdatePricing(
+        bookingPricing.id.toString(),
+        latestHistory.id.toString(),
+        booking.roomId.toString()
+      );
+    } catch (error) {
+      console.error(
+        `Lỗi khi cập nhật giá cho bookingPricingId: ${bookingPricing.id}, historyId: ${latestHistory.id}`,
+        error
+      );
     }
   }
 
-  // --- TÍNH LẠI TỔNG GỐC sau khi cập nhật lịch sử ---
-  const totalHistory =
-    bookingPricing.history?.reduce((sum, h) => sum + (h.amount || 0), 0) || 0;
+  // --- TÍNH LẠI TỔNG GỐC ---
+  const totalHistory = bookingPricing.history.reduce(
+    (sum, h) => sum + (h.amount || 0),
+    0
+  );
 
-  const totalSurcharge =
-    booking.surcharge?.reduce((sum, s) => sum + (s.Amount || 0), 0) || 0;
-  const totalUtility =
-    booking.items?.reduce(
-      (sum, u) => sum + (u.price || 0) * (u.quantity || 1),
-      0
-    ) || 0;
+  const totalSurcharge: number = Array.isArray(booking.surcharge)
+    ? (booking.surcharge as any[]).reduce((sum, s) => {
+        // đảm bảo s là object và có key 'amount'
+        if (s && typeof s === "object" && "amount" in s) {
+          const amt = (s as any).amount;
+          return sum + (typeof amt === "number" ? amt : 0);
+        }
+        return sum;
+      }, 0)
+    : 0;
+
+  const totalUtility: number = booking.items.reduce(
+    (sum, u) => sum + (u.price || 0) * (u.quantity || 1),
+    0
+  );
+
   let calculated = totalHistory + totalSurcharge + totalUtility;
 
   // Trừ trả trước & giảm giá
@@ -466,10 +453,12 @@ export const addNote = async (bookingId: string, note: Note) => {
     calculated = note.NegotiatedPrice;
   }
 
-  bookingPricing.calculatedAmount = Math.max(0, calculated); // tránh âm
-  await bookingPricing.save();
+  const updatedBookingPricing = await prisma.bookingPricing.update({
+    where: { id: bookingPricing.id },
+    data: { calculatedAmount: Math.max(0, calculated) }, // tránh âm
+  });
 
-  return { booking, bookingPricing };
+  return { booking, bookingPricing: updatedBookingPricing };
 };
 
 export const addDocumentInfo = async (
@@ -485,12 +474,19 @@ export const addDocumentInfo = async (
     EthnicGroup?: string;
   }
 ) => {
-  const booking = await Booking.findById(bookingId);
+  const booking = await prisma.booking.findUnique({
+    where: { id: Number(bookingId) },
+  });
   if (!booking) throw AppError.notFound("Không tìm thấy booking!");
 
+  // Lấy mảng hiện tại hoặc khởi tạo rỗng
+  const currentDocs: any[] = Array.isArray(booking.documentInfo)
+    ? booking.documentInfo
+    : [];
+
+  // Tạo entry mới
   const docEntry = {
     ID: doc.ID,
-    // normalize TypeID: accept either TypeID or TypeId from client
     TypeID: doc.TypeID ?? doc.TypeId ?? "CCCD",
     FullName: doc.FullName,
     Address: doc.Address || "",
@@ -499,45 +495,83 @@ export const addDocumentInfo = async (
     EthnicGroup: doc.EthnicGroup || "",
   };
 
-  booking.documentInfo = booking.documentInfo ?? [];
-  booking.documentInfo.push(docEntry as any);
-  await booking.save();
+  // Push vào mảng
+  currentDocs.push(docEntry);
 
-  return booking;
+  // Update booking.documentInfo
+  const updatedBooking = await prisma.booking.update({
+    where: { id: Number(bookingId) },
+    data: { documentInfo: currentDocs },
+  });
+
+  return updatedBooking;
 };
 
+// ================= ADD CAR =================
 export const addCarInfo = async (
   bookingId: string,
   car: { LicensePlate: string; Color?: string; VehicleType?: string }
 ) => {
-  const booking = await Booking.findById(bookingId);
+  const booking = await prisma.booking.findUnique({
+    where: { id: Number(bookingId) },
+  });
   if (!booking) throw AppError.notFound("Không tìm thấy booking!");
 
+  // Lấy mảng hiện tại hoặc khởi tạo rỗng
+  const currentCars: any[] = Array.isArray(booking.carInfo)
+    ? booking.carInfo
+    : [];
+
+  // Tạo entry mới
   const carEntry = {
     LicensePlate: car.LicensePlate,
     Color: car.Color || "",
     VehicleType: car.VehicleType || "",
   };
 
-  booking.carInfo = booking.carInfo ?? [];
-  booking.carInfo.push(carEntry as any);
-  await booking.save();
+  // Push vào mảng
+  currentCars.push(carEntry);
 
-  return booking;
+  // Update booking.carInfo
+  const updatedBooking = await prisma.booking.update({
+    where: { id: Number(bookingId) },
+    data: { carInfo: currentCars },
+  });
+
+  return updatedBooking;
 };
 
+// ================= GET DOCUMENT =================
 export const getDocumentInfo = async (bookingId: string) => {
-  const booking = await Booking.findById(bookingId).select("documentInfo");
+  const booking = await prisma.booking.findUnique({
+    where: { id: Number(bookingId) },
+  });
+
   if (!booking) throw AppError.notFound("Không tìm thấy booking!");
-  return booking.documentInfo ?? [];
+
+  // Nếu booking.documentInfo là mảng JSON, trả về mảng, nếu null hoặc không phải mảng thì trả mảng rỗng
+  const documents = Array.isArray(booking.documentInfo)
+    ? booking.documentInfo
+    : [];
+
+  return documents;
 };
 
+// ================= GET CAR =================
 export const getCarInfo = async (bookingId: string) => {
-  const booking = await Booking.findById(bookingId).select("carInfo");
+  const booking = await prisma.booking.findUnique({
+    where: { id: Number(bookingId) },
+  });
+
   if (!booking) throw AppError.notFound("Không tìm thấy booking!");
-  return booking.carInfo ?? [];
+
+  // Nếu booking.carInfo là mảng JSON, trả về mảng, nếu null hoặc không phải mảng thì trả mảng rỗng
+  const cars = Array.isArray(booking.carInfo) ? booking.carInfo : [];
+
+  return cars;
 };
 
+// ================= UPDATE DOCUMENT =================
 export const updateDocumentInfo = async (
   bookingId: string,
   docId: string,
@@ -551,26 +585,47 @@ export const updateDocumentInfo = async (
     EthnicGroup?: string;
   }>
 ) => {
-  const booking = await Booking.findById(bookingId);
+  const booking = await prisma.booking.findUnique({
+    where: { id: Number(bookingId) },
+  });
   if (!booking) throw AppError.notFound("Không tìm thấy booking!");
 
-  booking.documentInfo = booking.documentInfo ?? [];
-  const docs = booking.documentInfo as any[];
-  const idx = docs.findIndex((d: any) => d?.ID === docId);
-  if (idx === -1) throw AppError.notFound("Không tìm thấy thông tin giấy tờ");
+  const documents: any[] = Array.isArray(booking.documentInfo)
+    ? booking.documentInfo
+    : [];
 
-  const existing = docs[idx] as any;
-  const updated = {
-    ...existing,
-    ...updates,
+  // Tìm doc theo ID
+  const docIndex = documents.findIndex((d) => d?.ID === docId);
+  if (docIndex === -1)
+    throw AppError.notFound("Không tìm thấy thông tin giấy tờ");
+
+  const existingDoc = documents[docIndex] as Record<string, any>;
+
+  // Cập nhật thông tin
+  const updatedDoc = {
+    ...existingDoc,
+    ID: updates.ID ?? existingDoc.ID,
+    TypeID: updates.TypeID ?? existingDoc.TypeID,
+    FullName: updates.FullName ?? existingDoc.FullName,
+    Address: updates.Address ?? existingDoc.Address,
+    BirthDay: updates.BirthDay ?? existingDoc.BirthDay,
+    Gender:
+      typeof updates.Gender === "boolean" ? updates.Gender : existingDoc.Gender,
+    EthnicGroup: updates.EthnicGroup ?? existingDoc.EthnicGroup,
   };
 
-  // replace
-  booking.documentInfo[idx] = updated as any;
-  await booking.save();
-  return updated;
+  documents[docIndex] = updatedDoc;
+
+  // Lưu lại JSON
+  await prisma.booking.update({
+    where: { id: Number(bookingId) },
+    data: { documentInfo: documents },
+  });
+
+  return updatedDoc;
 };
 
+// ================= UPDATE CAR =================
 export const updateCarInfo = async (
   bookingId: string,
   licensePlate: string,
@@ -580,135 +635,194 @@ export const updateCarInfo = async (
     VehicleType?: string;
   }>
 ) => {
-  const booking = await Booking.findById(bookingId);
+  const booking = await prisma.booking.findUnique({
+    where: { id: Number(bookingId) },
+  });
   if (!booking) throw AppError.notFound("Không tìm thấy booking!");
 
-  booking.carInfo = booking.carInfo ?? [];
-  const cars = booking.carInfo as any[];
-  const idx = cars.findIndex((c: any) => c?.LicensePlate === licensePlate);
-  if (idx === -1) throw AppError.notFound("Không tìm thấy thông tin xe");
+  const cars: any[] = Array.isArray(booking.carInfo) ? booking.carInfo : [];
 
-  const existing = cars[idx] as any;
-  const updated = {
-    ...existing,
-    ...updates,
+  // Tìm xe theo licensePlate
+  const carIndex = cars.findIndex((c) => c?.LicensePlate === licensePlate);
+  if (carIndex === -1) throw AppError.notFound("Không tìm thấy thông tin xe");
+
+  const existingCar = cars[carIndex] as Record<string, any>;
+
+  // Cập nhật thông tin xe
+  const updatedCar = {
+    ...existingCar,
+    LicensePlate: updates.LicensePlate ?? existingCar.LicensePlate,
+    Color: updates.Color ?? existingCar.Color,
+    VehicleType: updates.VehicleType ?? existingCar.VehicleType,
   };
 
-  booking.carInfo[idx] = updated as any;
-  await booking.save();
-  return updated;
+  cars[carIndex] = updatedCar;
+
+  // Lưu lại JSON
+  await prisma.booking.update({
+    where: { id: Number(bookingId) },
+    data: { carInfo: cars },
+  });
+
+  return updatedCar;
 };
+
+// ================= BOOKING PRICING =================
 
 export const addUtility = async (
   bookingId: string,
-  utility: IUtility,
+  utility: { id: number; price: number; name: string },
   quantity: number
 ) => {
-  const booking = await Booking.findById(bookingId);
+  const booking = await prisma.booking.findUnique({
+    where: { id: Number(bookingId) },
+    include: { items: true, note: true },
+  });
   if (!booking) {
     throw AppError.notFound("Không tìm thấy booking!");
   }
 
-  const bookingPricing = await BookingPricing.findOne({ bookingId });
+  const bookingPricing = await prisma.bookingPricing.findFirst({
+    where: { bookingId: Number(bookingId) },
+  });
   if (!bookingPricing) {
     throw AppError.notFound("Không tìm thấy thông tin giá cho booking!");
   }
 
-  const utilityId = utility._id as Types.ObjectId;
-
-  const existingItem = booking.items.find((item) =>
-    item.utilitiesId.equals(utilityId)
+  const existingItem = booking.items.find(
+    (item: { utilitiesId: number }) => item.utilitiesId === utility.id
   );
 
   if (existingItem) {
-    // Nếu tồn tại, cộng quantity và cập nhật giá
-    existingItem.quantity += quantity;
-    existingItem.price = utility.price; // giữ giá hiện tại
+    await prisma.bookingItem.update({
+      where: { id: existingItem.id },
+      data: {
+        quantity: existingItem.quantity + quantity,
+        price: utility.price, // giữ nguyên giá
+      },
+    });
   } else {
-    // Nếu chưa tồn tại, push item mới
-    booking.items.push({
-      utilitiesId: utility._id as Types.ObjectId,
-      quantity,
-      price: utility.price,
-      name: utility.name,
+    await prisma.bookingItem.create({
+      data: {
+        bookingId: Number(bookingId),
+        utilitiesId: utility.id,
+        quantity,
+        price: utility.price,
+        name: utility.name,
+      },
     });
   }
 
-  await booking.save();
   // Cập nhật tổng tiền nếu không có giá thỏa thuận
   if (!booking.note?.NegotiatedPrice || booking.note.NegotiatedPrice <= 0) {
-    console.log("amount", utility.price);
-    bookingPricing.calculatedAmount =
-      (bookingPricing.calculatedAmount || 0) + utility.price * quantity;
+    // Lấy bookingPricing cần update
+    const bp = await prisma.bookingPricing.findFirst({
+      where: { bookingId: Number(bookingId) },
+      orderBy: { createdAt: "desc" }, // nếu muốn update cái mới nhất
+    });
+
+    if (!bp)
+      throw AppError.notFound("Không tìm thấy thông tin giá cho booking!");
+
+    await prisma.bookingPricing.update({
+      where: { id: bp.id }, // phải dùng 'id' chứ không phải 'bookingId'
+      data: {
+        calculatedAmount:
+          (bp.calculatedAmount || 0) + (utility.price || 0) * (quantity || 1),
+      },
+    });
   }
 
-  await bookingPricing.save();
-
-  return { booking, bookingPricing };
+  return {
+    booking: await prisma.booking.findUnique({
+      where: { id: Number(bookingId) },
+      include: { items: true },
+    }),
+    bookingPricing: await prisma.bookingPricing.findFirst({
+      where: { bookingId: Number(bookingId) },
+    }),
+  };
 };
 
 export const removeUtility = async (
   bookingId: string,
-  utilityId: string,
+  utilityId: number,
   quantity: number = 1
 ) => {
-  const booking = await Booking.findById(bookingId);
+  const booking = await prisma.booking.findUnique({
+    where: { id: Number(bookingId) },
+    include: { items: true },
+  });
   if (!booking) {
     throw AppError.notFound("Không tìm thấy booking!");
   }
 
-  const bookingPricing = await BookingPricing.findOne({ bookingId });
+  const bookingPricing = await prisma.bookingPricing.findFirst({
+    where: { bookingId: Number(bookingId) },
+  });
   if (!bookingPricing) {
     throw AppError.notFound("Không tìm thấy thông tin giá cho booking!");
   }
 
-  const itemIndex = booking.items.findIndex((item) =>
-    item.utilitiesId.equals(utilityId)
+  const existingItem = booking.items.find(
+    (item: { utilitiesId: number }) => item.utilitiesId === utilityId
   );
-
-  if (itemIndex === -1) {
+  if (!existingItem) {
     throw AppError.notFound("Tiện ích không tồn tại trong booking");
   }
 
-  const item = booking.items[itemIndex];
-
-  if (item.quantity > quantity) {
-    // Giảm số lượng
-    item.quantity -= quantity;
+  if (existingItem.quantity > quantity) {
+    await prisma.bookingItem.update({
+      where: { id: existingItem.id },
+      data: { quantity: existingItem.quantity - quantity },
+    });
   } else {
-    // Xóa hoàn toàn item nếu quantity <= số lượng hiện tại
-    booking.items.splice(itemIndex, 1);
+    await prisma.bookingItem.delete({
+      where: { id: existingItem.id },
+    });
   }
 
-  await booking.save();
-
-  // Cập nhật calculatedAmount
   const decrementAmount =
-    item.price! * Math.min(quantity, item.quantity + quantity);
-  bookingPricing.calculatedAmount =
-    (bookingPricing.calculatedAmount || 0) - decrementAmount;
+    (existingItem.price ?? 0) * Math.min(quantity, existingItem.quantity);
+  const newAmount = Math.max(
+    (bookingPricing.calculatedAmount || 0) - decrementAmount,
+    0
+  );
 
-  if (bookingPricing.calculatedAmount < 0) bookingPricing.calculatedAmount = 0;
+  await prisma.bookingPricing.update({
+    where: { id: bookingPricing.id },
+    data: { calculatedAmount: newAmount },
+  });
 
-  await bookingPricing.save();
-
-  return { booking, bookingPricing };
+  return {
+    booking: await prisma.booking.findUnique({
+      where: { id: Number(bookingId) },
+      include: { items: true },
+    }),
+    bookingPricing: await prisma.bookingPricing.findUnique({
+      where: { id: bookingPricing.id },
+    }),
+  };
 };
 
 export const deleteBooking = async (bookingId: string) => {
-  // 1️⃣ Lấy booking để biết roomId
-  const booking = await Booking.findById(bookingId);
+  const booking = await prisma.booking.findUnique({
+    where: { id: Number(bookingId) },
+  });
   if (!booking) {
     throw AppError.notFound("Không tìm thấy booking");
   }
 
   const roomId = booking.roomId;
 
-  // 2️⃣ Xóa booking
-  await Booking.findByIdAndDelete(bookingId);
+  await prisma.booking.delete({
+    where: { id: Number(bookingId) },
+  });
 
-  // 3️⃣ Cập nhật typeHire của phòng về 0
-  await RoomModel.findByIdAndUpdate(roomId, { typeHire: 0 });
+  await prisma.room.update({
+    where: { id: roomId },
+    data: { typeHire: 0 },
+  });
 
   return {
     success: true,
@@ -717,7 +831,11 @@ export const deleteBooking = async (bookingId: string) => {
 };
 
 export const getNote = async (bookingId: string): Promise<Note | null> => {
-  const booking = await Booking.findById(bookingId).select("note");
+  const booking = await prisma.booking.findUnique({
+    where: { id: Number(bookingId) },
+    include: { note: true },
+  });
+
   if (!booking) {
     throw AppError.notFound("Không tìm thấy booking");
   }
@@ -726,15 +844,15 @@ export const getNote = async (bookingId: string): Promise<Note | null> => {
     return null;
   }
 
-  const note: Note = {
-    Content: booking.note.Content,
+  // booking.note lúc này đã đúng type của Prisma
+  return {
+    BookingId: bookingId,
+    Content: booking.note.Content ?? undefined,
     Discount: booking.note.Discount,
     PayInAdvance: booking.note.PayInAdvance,
-    NegotiatedPrice: booking.note.NegotiatedPrice,
-    BookingId: bookingId,
+    NegotiatedPrice: booking.note.NegotiatedPrice ?? undefined,
+    BookingPricingId: booking.note.BookingPricingId ?? undefined,
   };
-
-  return note;
 };
 
 const MAX_RETRIES = 3;
@@ -781,492 +899,337 @@ const calculateHour = (
     ...historyPricing,
     appliedFirstHourPrice: firstHourPrice,
     appliedNextHourPrice: nextHourPrice,
-    amount: amount,
+    amount,
   };
 };
 
 export const moveRoom = async (bookingId: string, newRoomId: string) => {
-  let retries = 0;
+  const bookingIdNum = Number(bookingId);
+  const newRoomIdNum = Number(newRoomId);
 
-  while (retries < MAX_RETRIES) {
-    const session = await mongoose.startSession();
-    session.startTransaction();
+  return prisma.$transaction(async (tx) => {
+    // --- 1. Lấy booking và validate ---
+    const booking = await tx.booking.findUnique({
+      where: { id: bookingIdNum },
+      include: { items: true, note: true }, // surcharge bỏ include
+    });
+    if (!booking) throw AppError.notFound("Không tìm thấy booking");
 
-    try {
-      // 1. Validate Booking and Rooms
-      const booking = await Booking.findById(bookingId).session(session);
-      if (!booking) {
-        throw AppError.notFound("Không tìm thấy booking");
-      }
+    const oldRoom = await tx.room.findUnique({ where: { id: booking.roomId } });
+    if (!oldRoom) throw AppError.notFound("Không tìm thấy phòng hiện tại");
 
-      const oldRoom = await RoomModel.findById(booking.roomId).session(session);
-      if (!oldRoom) {
-        throw AppError.notFound("Không tìm thấy phòng hiện tại");
-      }
+    const newRoom = await tx.room.findUnique({ where: { id: newRoomIdNum } });
+    if (!newRoom) throw AppError.notFound("Không tìm thấy phòng cần đổi");
+    if (!newRoom.status)
+      throw AppError.badRequest("Phòng cần đổi không khả dụng");
+    if (newRoomIdNum === booking.roomId)
+      throw AppError.badRequest("Phòng mới phải khác phòng hiện tại");
+    if (newRoom.hotelId !== oldRoom.hotelId)
+      throw AppError.badRequest("Phòng mới phải thuộc cùng khách sạn");
 
-      oldRoom.typeHire = 0;
+    const bookingPricing = await tx.bookingPricing.findFirst({
+      where: { bookingId: bookingIdNum },
+    });
+    if (!bookingPricing)
+      throw AppError.notFound("Không tìm thấy thông tin giá cho booking");
 
-      const newRoom = await RoomModel.findById(newRoomId).session(session);
-      if (!newRoom) {
-        throw AppError.notFound("Không tìm thấy phòng cần đổi");
-      }
+    // --- 2. Xác định typeHire mới ---
+    const typeHireMap: Record<string, number> = { HOUR: 1, NIGHT: 2, DAY: 3 };
+    const newTypeHire = typeHireMap[bookingPricing.priceType] || 1;
 
-      if (!newRoom.status) {
-        throw AppError.badRequest("Phòng cần đổi không khả dụng");
-      }
+    // --- 3. Recalculate Pricing History ---
+    const histories = await tx.pricingHistory.findMany({
+      where: { bookingPricingId: bookingPricing.id },
+    });
 
-      if (newRoomId === booking.roomId.toString()) {
-        throw AppError.badRequest("Phòng mới phải khác phòng hiện tại");
-      }
-
-      if (newRoom.hotelId.toString() !== oldRoom.hotelId.toString()) {
-        throw AppError.badRequest("Phòng mới phải thuộc cùng khách sạn");
-      }
-
-      const bookingPricing = await BookingPricing.findOne({
-        bookingId,
-      }).session(session);
-      if (!bookingPricing) {
-        throw AppError.notFound("Không tìm thấy thông tin giá cho booking");
-      }
-
-      const typedBookingPricing = bookingPricing as BookingPricingDocument;
-
-      const typeHireMap: { [key: string]: number } = {
-        HOUR: 1,
-        NIGHT: 2,
-        DAY: 3,
-      };
-      newRoom.typeHire = typeHireMap[typedBookingPricing.priceType] || 1;
-
-      // 3. Update Booking and BookingPricing
-      booking.roomId = newRoom._id;
-      typedBookingPricing.roomId = newRoom._id;
-
-      // 4. Recalculate Pricing for All History Records
-      const updatedHistory: PricingHistory[] = [];
-      for (const history of typedBookingPricing.history) {
-        if (!history._id) continue;
-
-        let updatedRecord: PricingHistory = { ...history };
-
-        switch (history.priceType) {
-          case "HOUR":
-            updatedRecord = calculateHour(
-              history,
-              newRoom.originalPrice,
-              newRoom.afterHoursPrice
-            );
-            break;
-
-          case "NIGHT": {
-            updatedRecord.amount = newRoom.nightPrice || 0;
-            updatedRecord.appliedNightPrice = newRoom.nightPrice;
-            break;
-          }
-
-          case "DAY":
-            {
-              updatedRecord.amount = newRoom.dayPrice || 0;
-              updatedRecord.appliedDayPrice = newRoom.dayPrice;
-            }
-            break;
-
-          default:
-            throw new Error(`Unsupported priceType: ${history.priceType}`);
-        }
-
-        updatedHistory.push(updatedRecord);
-      }
-
-      // Cập nhật toàn bộ history
-      typedBookingPricing.history = updatedHistory;
-
-      // 5. Calculate Total Amount
-      const totalHistory =
-        typedBookingPricing.history?.reduce(
-          (sum, h) => sum + (h.amount || 0),
-          0
-        ) || 0;
-
-      const totalSurcharge =
-        booking.surcharge?.reduce((sum, s) => sum + (s.Amount || 0), 0) || 0;
-      const totalUtility =
-        booking.items?.reduce(
-          (sum, u) => sum + (u.price || 0) * (u.quantity || 1),
-          0
-        ) || 0;
-      let calculated = totalHistory + totalSurcharge + totalUtility;
-
-      // Apply Discount and PayInAdvance
-      if (booking.note?.Discount && booking.note.Discount > 0) {
-        calculated -= booking.note.Discount;
-      }
-      if (booking.note?.PayInAdvance && booking.note.PayInAdvance > 0) {
-        calculated -= booking.note.PayInAdvance;
-      }
-
-      if (booking.note?.NegotiatedPrice && booking.note.NegotiatedPrice > 0) {
-        calculated = booking.note.NegotiatedPrice;
-      }
-
-      typedBookingPricing.calculatedAmount = Math.max(0, calculated);
-
-      // 7. Save All Changes
-      await oldRoom.save({ session });
-      await newRoom.save({ session });
-      await booking.save({ session });
-      await typedBookingPricing.save({ session });
-
-      // 8. Commit Transaction
-      await session.commitTransaction();
-      return { booking, bookingPricing: typedBookingPricing, oldRoom, newRoom };
-    } catch (error: any) {
-      await session.abortTransaction();
-      if (error.name === "MongoServerError" && error.code === 112) {
-        // WriteConflict
-        retries++;
-        if (retries >= MAX_RETRIES) {
-          throw AppError.database(
-            "Write conflict occurred after maximum retries",
-            error
+    const updatedHistory = histories.map((h) => {
+      switch (h.priceType) {
+        case "HOUR":
+          return calculateHour(
+            h,
+            newRoom.originalPrice,
+            newRoom.afterHoursPrice
           );
-        }
-        continue; // Retry the transaction
+        case "NIGHT":
+          return {
+            ...h,
+            amount: newRoom.nightPrice ?? 0,
+            appliedNightPrice: newRoom.nightPrice ?? 0,
+          };
+        case "DAY":
+          return {
+            ...h,
+            amount: newRoom.dayPrice ?? 0,
+            appliedDayPrice: newRoom.dayPrice ?? 0,
+          };
+        default:
+          throw new Error(`Unsupported priceType: ${h.priceType}`);
       }
-      throw error;
-    } finally {
-      session.endSession();
-    }
-  }
+    });
 
-  throw AppError.database("Failed to execute transaction after retries");
+    // --- 4. Tính tổng tiền ---
+    const totalHistory = updatedHistory.reduce(
+      (sum, h) => sum + (h.amount ?? 0),
+      0
+    );
+
+    const totalSurcharge = Array.isArray(booking.surcharge)
+      ? booking.surcharge.reduce((sum, s: any) => sum + (s.amount ?? 0), 0)
+      : 0;
+
+    const totalUtility = Array.isArray(booking.items)
+      ? booking.items.reduce(
+          (sum, u: any) => sum + (u.price ?? 0) * (u.quantity ?? 1),
+          0
+        )
+      : 0;
+
+    let calculated =
+      Number(totalHistory) + Number(totalSurcharge) + totalUtility;
+
+    if (booking.note) {
+      const { Discount, PayInAdvance, NegotiatedPrice } = booking.note;
+      if (Discount && Discount > 0) calculated -= Discount;
+      if (PayInAdvance && PayInAdvance > 0) calculated -= PayInAdvance;
+      if (NegotiatedPrice && NegotiatedPrice > 0) calculated = NegotiatedPrice;
+    }
+
+    // --- 5. Update database ---
+    await Promise.all([
+      tx.room.update({ where: { id: oldRoom.id }, data: { typeHire: 0 } }),
+      tx.room.update({
+        where: { id: newRoom.id },
+        data: { typeHire: newTypeHire },
+      }),
+      tx.booking.update({
+        where: { id: bookingIdNum },
+        data: { roomId: newRoomIdNum },
+      }),
+      tx.bookingPricing.update({
+        where: { id: bookingPricing.id },
+        data: {
+          roomId: newRoomIdNum,
+          calculatedAmount: Math.max(0, calculated),
+        },
+      }),
+      ...updatedHistory.map((h) =>
+        tx.pricingHistory.update({ where: { id: h.id }, data: h })
+      ),
+    ]);
+
+    // --- 6. Return kết quả ---
+    const [updatedBooking, updatedPricing, oldRoomUpdated, newRoomUpdated] =
+      await Promise.all([
+        tx.booking.findUnique({
+          where: { id: bookingIdNum },
+          include: { items: true, note: true },
+        }),
+        tx.bookingPricing.findUnique({ where: { id: bookingPricing.id } }),
+        tx.room.findUnique({ where: { id: oldRoom.id } }),
+        tx.room.findUnique({ where: { id: newRoom.id } }),
+      ]);
+
+    return {
+      booking: updatedBooking,
+      bookingPricing: updatedPricing,
+      oldRoom: oldRoomUpdated,
+      newRoom: newRoomUpdated,
+    };
+  });
 };
 
 export const changePriceType = async (
   bookingId: string,
   newPriceType: "HOUR" | "DAY" | "NIGHT"
 ) => {
-  let retries = 0;
+  const bookingIdNum = Number(bookingId);
+  if (isNaN(bookingIdNum)) throw AppError.badRequest("bookingId không hợp lệ");
 
-  while (retries < MAX_RETRIES) {
-    const session = await mongoose.startSession();
-    session.startTransaction();
+  return prisma.$transaction(async (tx) => {
+    // 1. Lấy booking + bookingPricing + room
+    const booking = await tx.booking.findUnique({
+      where: { id: bookingIdNum },
+      include: { items: true, note: true },
+    });
+    if (!booking) throw AppError.notFound("Không tìm thấy booking");
 
-    try {
-      // 1. Validate Booking and BookingPricing
-      const booking = await Booking.findById(bookingId).session(session);
-      if (!booking) {
-        throw AppError.notFound("Không tìm thấy booking");
-      }
+    const bookingPricing = await tx.bookingPricing.findFirst({
+      where: { bookingId: bookingIdNum },
+      include: { history: true },
+    });
+    if (!bookingPricing)
+      throw AppError.notFound("Không tìm thấy thông tin giá cho booking");
 
-      const bookingPricing = await BookingPricing.findOne({
-        bookingId,
-      }).session(session);
-      if (!bookingPricing) {
-        throw AppError.notFound("Không tìm thấy thông tin giá cho booking");
-      }
+    const room = await tx.room.findUnique({ where: { id: booking.roomId } });
+    if (!room) throw AppError.notFound("Không tìm thấy phòng");
 
-      const typedBookingPricing = bookingPricing as BookingPricingDocument;
-      const room = await RoomModel.findById(booking.roomId).session(session);
-      if (!room) {
-        throw AppError.notFound("Không tìm thấy phòng");
-      }
+    const currentTime = new Date();
+    const MS_IN_24H = 24 * 60 * 60 * 1000;
 
-      const currentTime = new Date();
-      const noonToday = new Date(currentTime);
-      noonToday.setHours(12, 0, 0, 0);
-      const MS_IN_24H = 24 * 60 * 60 * 1000;
-      // 2. Handle Price Type Change
-      const latestHistory = typedBookingPricing.history
-        .filter((h) => !h.appliedTo)
-        .sort((a, b) => b.appliedFrom.getTime() - a.appliedFrom.getTime())[0];
+    const histories = [...bookingPricing.history].sort(
+      (a, b) => a.appliedFrom.getTime() - b.appliedFrom.getTime()
+    );
+    const latestHistory = histories[histories.length - 1];
+    const prevHistory = histories[histories.length - 2];
 
-      if (!latestHistory) {
-        throw AppError.badRequest("Không tìm thấy lịch sử giá hiện tại");
-      }
+    if (!latestHistory)
+      throw AppError.badRequest("Không tìm thấy lịch sử giá hiện tại");
 
-      // 3. Update amount for current history before changing type
-      if (latestHistory._id) {
-        await calculateAndUpdatePricing(
-          typedBookingPricing._id.toString(),
-          latestHistory._id.toString(),
-          room._id.toString(),
-          { session }
-        );
-      }
+    const typeHireMap: Record<string, number> = { HOUR: 1, NIGHT: 2, DAY: 3 };
 
-      const bookingPricingUpdated = await BookingPricing.findOne({
-        bookingId,
-      }).session(session);
+    // --- 2. Xử lý đổi loại giá ---
+    const updateRoomTypeHire = async () => {
+      await tx.room.update({
+        where: { id: room.id },
+        data: { typeHire: typeHireMap[newPriceType] },
+      });
+    };
 
-      const typedBookingPricingUpdated =
-        bookingPricingUpdated as BookingPricingDocument;
+    const updateHistory = async (data: Partial<typeof latestHistory>) => {
+      await tx.pricingHistory.update({ where: { id: latestHistory.id }, data });
+    };
 
-      const latestHistoryUpdated = typedBookingPricingUpdated.history
-        .filter((h) => !h.appliedTo)
-        .sort((a, b) => b.appliedFrom.getTime() - a.appliedFrom.getTime())[0];
+    const createHistory = async (data: Partial<typeof latestHistory>) => {
+      await tx.pricingHistory.create({
+        data: {
+          ...data,
+          bookingPricingId: bookingPricing.id,
+          action: "CHANGE_TYPE",
+        },
+      });
+    };
 
-      const typeHireMap: { [key: string]: number } = {
-        HOUR: 1,
-        NIGHT: 2,
-        DAY: 3,
-      };
+    if (latestHistory.priceType === "HOUR" && newPriceType === "DAY") {
+      const appliedToTime = latestHistory.appliedTo ?? currentTime;
+      const elapsed = currentTime.getTime() - new Date(appliedToTime).getTime();
 
-      const histories = typedBookingPricingUpdated.history.sort(
-        (a, b) => a.appliedFrom.getTime() - b.appliedFrom.getTime()
-      );
-      const lastIndex = histories.length - 1;
-      const prevHistory = histories[lastIndex - 1];
-
-      // 4. Process based on current and new price type
-      if (latestHistoryUpdated.priceType === "HOUR" && newPriceType === "DAY") {
-        const appliedToTime = latestHistoryUpdated.appliedTo ?? currentTime;
-        const elapsed =
-          currentTime.getTime() - new Date(appliedToTime).getTime();
-        if (elapsed >= MS_IN_24H) {
-          // Close current hour history
-          latestHistoryUpdated.appliedTo = currentTime;
-          // Create new day history
-          const newHistory: PricingHistory = {
-            action: "CHANGE_TYPE",
-            priceType: "DAY",
-            amount: room.dayPrice || 0,
-            appliedFrom: currentTime,
-            appliedDayPrice: room.dayPrice,
-          };
-          typedBookingPricingUpdated.history.push(newHistory);
-          room.typeHire = typeHireMap[newPriceType];
-        } else {
-          latestHistoryUpdated.priceType = "DAY";
-          latestHistoryUpdated.amount = room.dayPrice || 0;
-          latestHistoryUpdated.appliedDayPrice = room.dayPrice;
-          latestHistoryUpdated.appliedFirstHourPrice = 0;
-          latestHistoryUpdated.appliedNextHourPrice = 0;
-          room.typeHire = typeHireMap[newPriceType];
-        }
-      } else if (
-        latestHistoryUpdated.priceType === "HOUR" &&
-        newPriceType === "NIGHT"
-      ) {
-        const appliedFrom = latestHistoryUpdated.appliedFrom;
-        const sevenPM = new Date(appliedFrom);
-        sevenPM.setHours(19, 0, 0, 0);
-
-        if (appliedFrom < sevenPM && currentTime > sevenPM) {
-          // Case 1: Checkin trước 19h, đổi sau 19h
-          latestHistoryUpdated.appliedTo = sevenPM;
-
-          const newHistory: PricingHistory = {
-            action: "CHANGE_TYPE",
-            priceType: "NIGHT",
-            amount: room.nightPrice || 0,
-            appliedFrom: sevenPM,
-            appliedNightPrice: room.nightPrice,
-          };
-          typedBookingPricingUpdated.history.push(newHistory);
-        } else {
-          // Case 2: Checkin sau 19h (convert trực tiếp)
-          latestHistoryUpdated.priceType = "NIGHT";
-          latestHistoryUpdated.appliedNightPrice = room.nightPrice;
-          latestHistoryUpdated.amount = room.nightPrice || 0;
-
-          // Xoá thông tin giờ cũ nếu có
-          latestHistoryUpdated.appliedFirstHourPrice = 0;
-          latestHistoryUpdated.appliedNextHourPrice = 0;
-        }
-
-        room.typeHire = typeHireMap[newPriceType];
-      } else if (
-        latestHistoryUpdated.priceType === "NIGHT" &&
-        newPriceType === "DAY"
-      ) {
-        if (prevHistory && prevHistory.priceType === "DAY") {
-          // Tính mốc 24h kể từ appliedFrom của prevHistory
-          const appliedFrom = new Date(prevHistory.appliedFrom);
-          const fullDayMark = new Date(appliedFrom);
-          fullDayMark.setHours(fullDayMark.getHours() + 24);
-
-          if (currentTime < fullDayMark) {
-            // rollback: vẫn dùng DAY cũ
-
-            // 1. Xóa bản ghi NIGHT hiện tại
-            typedBookingPricingUpdated.history.splice(lastIndex, 1);
-
-            // 3. Reset appliedTo của prevHistory (day) để tiếp tục tính
-            prevHistory.appliedTo = undefined;
-          }
-        } else {
-          // Đã đủ 24h → thực hiện logic chuyển sang DAY mới
-          latestHistoryUpdated.priceType = "DAY";
-          latestHistoryUpdated.appliedNightPrice = 0;
-          latestHistoryUpdated.appliedDayPrice = room.dayPrice;
-          latestHistoryUpdated.amount = room.dayPrice || 0;
-        }
-        room.typeHire = typeHireMap[newPriceType];
-      } else if (
-        latestHistoryUpdated.priceType === "NIGHT" &&
-        newPriceType === "HOUR"
-      ) {
-        // Update night to hour
-        const histories = typedBookingPricingUpdated.history.sort(
-          (a, b) => a.appliedFrom.getTime() - b.appliedFrom.getTime()
-        );
-        const lastIndex = histories.length - 1;
-        const prevHistory = histories[lastIndex - 1];
-
-        if (prevHistory && prevHistory.priceType === "HOUR") {
-          // 1. Khôi phục bản ghi giờ
-          if (prevHistory.appliedTo) {
-            const diffMs =
-              currentTime.getTime() - prevHistory.appliedTo.getTime();
-            const diffHours = Math.ceil(diffMs / (1000 * 60 * 60));
-
-            prevHistory.appliedTo = undefined;
-            prevHistory.amount! += diffHours * (room.afterHoursPrice || 0);
-          }
-
-          // 3. Xóa bản ghi NIGHT hiện tại
-          typedBookingPricingUpdated.history.splice(lastIndex, 1);
-        } else {
-          // Fallback: chuyển NIGHT → HOUR trực tiếp
-          latestHistoryUpdated.priceType = "HOUR";
-          latestHistoryUpdated.appliedNightPrice = 0;
-          latestHistoryUpdated.appliedFirstHourPrice = room.originalPrice;
-          latestHistoryUpdated.appliedNextHourPrice = room.afterHoursPrice;
-        }
-
-        room.typeHire = typeHireMap[newPriceType];
-      } else if (
-        latestHistoryUpdated.priceType === "DAY" &&
-        newPriceType === "HOUR"
-      ) {
-        if (prevHistory && prevHistory.priceType === "HOUR") {
-          // 1. Khôi phục lại bản ghi giờ
-          if (prevHistory.appliedTo) {
-            // Tính số giờ phát sinh từ appliedTo cũ đến hiện tại
-            const diffMs =
-              currentTime.getTime() - prevHistory.appliedTo.getTime();
-            const diffHours = Math.ceil(diffMs / (1000 * 60 * 60));
-
-            prevHistory.appliedTo = undefined;
-            // cộng thêm tiền giờ phát sinh
-            prevHistory.amount! += diffHours * (room.afterHoursPrice || 0);
-          }
-
-          // 3. Xóa bản ghi ngày (latestHistoryUpdated)
-          typedBookingPricingUpdated.history.splice(lastIndex, 1);
-        } else {
-          // Không có bản ghi giờ trước đó -> fallback về logic cũ
-          latestHistoryUpdated.priceType = "HOUR";
-          latestHistoryUpdated.appliedDayPrice = 0;
-          latestHistoryUpdated.appliedFirstHourPrice = room.originalPrice;
-          latestHistoryUpdated.appliedNextHourPrice = room.afterHoursPrice;
-        }
-
-        room.typeHire = typeHireMap[newPriceType];
-      } else if (
-        latestHistoryUpdated.priceType === "DAY" &&
-        newPriceType === "NIGHT"
-      ) {
-        if (prevHistory && prevHistory.priceType === "NIGHT") {
-          // Tính mốc 12h trưa tiếp theo kể từ appliedFrom của prevHistory
-          const noonNextDay = new Date(prevHistory.appliedFrom);
-          noonNextDay.setDate(noonNextDay.getDate() + 1);
-          noonNextDay.setHours(12, 0, 0, 0);
-          if (currentTime < noonNextDay) {
-            // rollback: vẫn dùng NIGHT cũ
-
-            // 1. Xóa bản ghi DAY hiện tại
-            typedBookingPricingUpdated.history.splice(lastIndex, 1);
-
-            // 3. Reset appliedTo của prevHistory (night) để tiếp tục tính
-            prevHistory.appliedTo = undefined;
-          }
-        } else {
-          // Đã qua 12h → thực hiện logic chuyển sang NIGHT mới
-          latestHistoryUpdated.priceType = "NIGHT";
-          latestHistoryUpdated.appliedDayPrice = 0;
-          latestHistoryUpdated.appliedNightPrice = room.nightPrice;
-          latestHistoryUpdated.amount = room.nightPrice || 0;
-        }
-        room.typeHire = typeHireMap[newPriceType];
+      if (elapsed >= MS_IN_24H) {
+        await updateHistory({ appliedTo: currentTime });
+        await createHistory({
+          priceType: "DAY",
+          amount: room.dayPrice || 0,
+          appliedFrom: currentTime,
+          appliedDayPrice: room.dayPrice,
+        });
       } else {
-        throw AppError.badRequest(
-          "Loại giá không hợp lệ hoặc không cần thay đổi"
-        );
+        await updateHistory({
+          priceType: "DAY",
+          amount: room.dayPrice || 0,
+          appliedDayPrice: room.dayPrice,
+          appliedFirstHourPrice: 0,
+          appliedNextHourPrice: 0,
+        });
       }
+      await updateRoomTypeHire();
+    } else if (latestHistory.priceType === "HOUR" && newPriceType === "NIGHT") {
+      const appliedFrom = latestHistory.appliedFrom;
+      const sevenPM = new Date(appliedFrom);
+      sevenPM.setHours(19, 0, 0, 0);
 
-      // 5. Update amount for new history if needed (for HOUR type)
-      const newHistory =
-        typedBookingPricingUpdated.history[
-          typedBookingPricingUpdated.history.length - 1
-        ];
-
-      // 6. Recalculate Total Amount
-      const totalHistory = typedBookingPricingUpdated.history.reduce(
-        (sum, h) => sum + (h.amount || 0),
-        0
-      );
-      const totalSurcharge =
-        booking.surcharge?.reduce((sum, s) => sum + (s.Amount || 0), 0) || 0;
-      const totalUtility =
-        booking.items?.reduce(
-          (sum, u) => sum + (u.price || 0) * (u.quantity || 1),
-          0
-        ) || 0;
-      let calculated = totalHistory + totalSurcharge + totalUtility;
-
-      // Apply Discount and PayInAdvance
-      if (booking.note?.Discount && booking.note.Discount > 0) {
-        calculated -= booking.note.Discount;
+      if (appliedFrom < sevenPM && currentTime > sevenPM) {
+        await updateHistory({ appliedTo: sevenPM });
+        await createHistory({
+          priceType: "NIGHT",
+          amount: room.nightPrice || 0,
+          appliedFrom: sevenPM,
+          appliedNightPrice: room.nightPrice,
+        });
+      } else {
+        await updateHistory({
+          priceType: "NIGHT",
+          amount: room.nightPrice || 0,
+          appliedNightPrice: room.nightPrice,
+          appliedFirstHourPrice: 0,
+          appliedNextHourPrice: 0,
+        });
       }
-      if (booking.note?.PayInAdvance && booking.note.PayInAdvance > 0) {
-        calculated -= booking.note.PayInAdvance;
-      }
-      if (booking.note?.NegotiatedPrice && booking.note.NegotiatedPrice > 0) {
-        calculated = booking.note.NegotiatedPrice;
-      }
-
-      typedBookingPricingUpdated.calculatedAmount = Math.max(0, calculated);
-      typedBookingPricingUpdated.priceType = newPriceType;
-
-      // 7. Save All Changes
-      await room.save({ session });
-      await booking.save({ session });
-      await typedBookingPricingUpdated.save({ session });
-
-      // 8. Re-fetch BookingPricing to ensure updated data
-      const updatedBookingPricing = await BookingPricing.findOne({
-        bookingId,
-      }).session(session);
-      if (!updatedBookingPricing) {
-        throw AppError.notFound(
-          "Không tìm thấy thông tin giá sau khi cập nhật"
-        );
-      }
-
-      // 9. Commit Transaction
-      await session.commitTransaction();
-      return { booking, bookingPricing: updatedBookingPricing, room };
-    } catch (error: any) {
-      await session.abortTransaction();
-      if (error.name === "MongoServerError" && error.code === 112) {
-        retries++;
-        if (retries >= MAX_RETRIES) {
-          throw AppError.database(
-            "Write conflict occurred after maximum retries",
-            error
-          );
+      await updateRoomTypeHire();
+    } else if (latestHistory.priceType === "NIGHT" && newPriceType === "DAY") {
+      if (prevHistory?.priceType === "DAY") {
+        const fullDayMark = new Date(prevHistory.appliedFrom);
+        fullDayMark.setHours(fullDayMark.getHours() + 24);
+        if (currentTime < fullDayMark) {
+          await tx.pricingHistory.delete({ where: { id: latestHistory.id } });
+          await tx.pricingHistory.update({
+            where: { id: prevHistory.id },
+            data: { appliedTo: null },
+          });
         }
-        continue;
+      } else {
+        await updateHistory({
+          priceType: "DAY",
+          amount: room.dayPrice || 0,
+          appliedDayPrice: room.dayPrice,
+          appliedNightPrice: 0,
+        });
       }
-      throw error;
-    } finally {
-      session.endSession();
+      await updateRoomTypeHire();
+    } else {
+      throw AppError.badRequest(
+        "Loại giá không hợp lệ hoặc không cần thay đổi"
+      );
     }
-  }
-  throw AppError.database("Failed to execute transaction after retries");
+
+    // --- 3. Recalculate tổng tiền ---
+    const historiesUpdated = await tx.pricingHistory.findMany({
+      where: { bookingPricingId: bookingPricing.id },
+    });
+    const totalHistory = historiesUpdated.reduce(
+      (sum, h) => sum + (h.amount ?? 0),
+      0
+    );
+
+    // Ép kiểu an toàn cho surcharge
+    const totalSurcharge = Array.isArray(booking.surcharge)
+      ? (booking.surcharge as { amount?: number }[]).reduce(
+          (sum, x) => sum + (typeof x.amount === "number" ? x.amount : 0),
+          0
+        )
+      : 0;
+
+    // Ép kiểu an toàn cho items/utility
+    const totalUtility = Array.isArray(booking.items)
+      ? (booking.items as { price?: number; quantity?: number }[]).reduce(
+          (sum, u) =>
+            sum +
+            (typeof u.price === "number" ? u.price : 0) *
+              (typeof u.quantity === "number" ? u.quantity : 1),
+          0
+        )
+      : 0;
+
+    // Tính tổng tiền
+    let calculated = totalHistory + totalSurcharge + totalUtility;
+
+    if (booking.note?.Discount) calculated -= booking.note.Discount;
+    if (booking.note?.PayInAdvance) calculated -= booking.note.PayInAdvance;
+    if (booking.note?.NegotiatedPrice && booking.note.NegotiatedPrice > 0)
+      calculated = booking.note.NegotiatedPrice;
+
+    await tx.bookingPricing.update({
+      where: { id: bookingPricing.id },
+      data: {
+        priceType: newPriceType,
+        calculatedAmount: Math.max(0, calculated),
+      },
+    });
+
+    // --- 4. Return kết quả ---
+    const [updatedBooking, updatedPricing, updatedRoom] = await Promise.all([
+      tx.booking.findUnique({ where: { id: booking.id } }),
+      tx.bookingPricing.findUnique({
+        where: { id: bookingPricing.id },
+        include: { history: true },
+      }),
+      tx.room.findUnique({ where: { id: room.id } }),
+    ]);
+
+    return {
+      booking: updatedBooking,
+      bookingPricing: updatedPricing,
+      room: updatedRoom,
+    };
+  });
 };
 
 /**
@@ -1274,230 +1237,121 @@ export const changePriceType = async (
  * Chỉ lấy các phòng đang được thuê (typeHire > 0)
  */
 export const getBookingsByHotelId = async (hotelId: string) => {
-  if (!Types.ObjectId.isValid(hotelId)) {
-    throw new Error("ID khách sạn không hợp lệ");
-  }
+  const hotelIdNum = Number(hotelId); // hotelId là Int trong schema
+  if (isNaN(hotelIdNum)) throw AppError.badRequest("ID khách sạn không hợp lệ");
 
-  // Pipeline để join booking với room và tính toán pricing
-  const pipeline = [
-    // 1. Lookup rooms của hotel
-    {
-      $lookup: {
-        from: "rooms",
-        localField: "roomId",
-        foreignField: "_id",
-        as: "room",
-      },
-    },
-    { $unwind: "$room" },
-    // 2. Filter theo hotelId và typeHire > 0
-    {
-      $match: {
-        "room.hotelId": new Types.ObjectId(hotelId),
-        "room.typeHire": { $gt: 0 },
-      },
-    },
-    // 3. Lookup booking pricing
-    {
-      $lookup: {
-        from: "bookingpricings",
-        localField: "_id",
-        foreignField: "bookingId",
-        as: "pricing",
-      },
-    },
-    // 4. Lookup utilities từ booking items
-    {
-      $lookup: {
-        from: "utilities",
-        localField: "items.utilitiesId",
-        foreignField: "_id",
-        as: "utilities",
-      },
-    },
-    // 5. Project để tạo định dạng giống bill
-    {
-      $project: {
-        totalRoomPrice: {
-          $sum: "$pricing.calculatedAmount",
-        },
-        totalUtilitiesPrice: {
-          $sum: {
-            $map: {
-              input: "$items",
-              as: "item",
-              in: {
-                $let: {
-                  vars: {
-                    utility: {
-                      $arrayElemAt: [
-                        {
-                          $filter: {
-                            input: "$utilities",
-                            cond: { $eq: ["$$this._id", "$$item.utilitiesId"] },
-                          },
-                        },
-                        0,
-                      ],
-                    },
-                  },
-                  in: {
-                    $multiply: [
-                      "$$item.quantity",
-                      { $ifNull: ["$$utility.price", 0] },
-                    ],
-                  },
-                },
-              },
-            },
-          },
-        },
-        roomId: "$roomId",
-        hotelId: "$room.hotelId",
-        createdAt: "$createdAt",
-        updatedAt: "$updatedAt",
-      },
-    },
-  ];
+  // 1. Validate hotel existence
+  const hotel = await prisma.hotel.findUnique({ where: { id: hotelIdNum } });
+  if (!hotel) throw AppError.notFound("ID khách sạn không tồn tại");
 
-  const bookings = await Booking.aggregate(pipeline);
-  return bookings;
+  // 2. Query bookings + join room, bookingPricing, items + utilities
+  const bookings = await prisma.booking.findMany({
+    where: {
+      room: { hotelId: hotelIdNum, typeHire: { gt: 0 } },
+    },
+    include: {
+      room: true,
+      bookingPricings: true,
+      items: { include: { utility: true } },
+    },
+  });
+
+  // 3. Map kết quả + tính tổng tiền
+  return bookings.map((booking) => {
+    // Tổng tiền phòng
+    const totalRoomPrice = booking.bookingPricings.reduce(
+      (sum, pricing) => sum + (pricing.calculatedAmount ?? 0),
+      0
+    );
+
+    // Tổng tiền dịch vụ
+    const totalUtilitiesPrice = booking.items.reduce((sum, item) => {
+      const price = item.utility?.price ?? 0;
+      const quantity = item.quantity ?? 1;
+      return sum + price * quantity;
+    }, 0);
+
+    return {
+      totalRoomPrice,
+      totalUtilitiesPrice,
+      roomId: booking.roomId,
+      hotelId: booking.room.hotelId,
+      createdAt: booking.createdAt,
+      updatedAt: booking.updatedAt,
+    };
+  });
 };
 
 export const getBookingsByRoomIds = async (
   roomIds: string[],
   date?: string
 ) => {
-  const roomObjectIds = roomIds.map((id) => new Types.ObjectId(id));
+  if (!roomIds) {
+    throw AppError.badRequest("Danh sách roomId không hợp lệ");
+  }
 
-  let matchCondition: any = {
-    roomId: { $in: roomObjectIds },
-  };
+  // Chuyển roomIds sang number
+  const roomIdsNum = roomIds.map((id) => {
+    const num = Number(id);
+    if (isNaN(num)) throw AppError.badRequest(`roomId không hợp lệ: ${id}`);
+    return num;
+  });
 
-  // Nếu có date filter, thêm điều kiện lọc theo ngày
+  // --- 1. Build where condition ---
+  let whereCondition: any = { roomId: { in: roomIdsNum } };
+
   if (date) {
     const targetDate = new Date(date);
-
-    // Tạo start và end của ngày để lọc chính xác
     const startOfDay = new Date(targetDate);
     startOfDay.setHours(0, 0, 0, 0);
-
     const endOfDay = new Date(targetDate);
     endOfDay.setHours(23, 59, 59, 999);
 
-    // Lọc các booking có checkin trong ngày hoặc đang active trong ngày đó
-    matchCondition = {
-      ...matchCondition,
-      $or: [
-        // Case 1: Booking checkin trong ngày này
+    whereCondition = {
+      ...whereCondition,
+      OR: [
+        { checkin: { gte: startOfDay, lte: endOfDay } }, // Checkin trong ngày
         {
-          checkin: {
-            $gte: startOfDay,
-            $lte: endOfDay,
-          },
-        },
-        // Case 2: Booking đang active trong ngày này (checkin trước, chưa checkout hoặc checkout sau)
-        {
-          checkin: { $lt: startOfDay },
-          $or: [
-            { checkout: null }, // chưa checkout
-            { checkout: { $gt: startOfDay } }, // checkout sau start của ngày
-          ],
-        },
+          checkin: { lt: startOfDay },
+          OR: [{ checkout: null }, { checkout: { gt: startOfDay } }],
+        }, // Active trong ngày
       ],
     };
   }
 
-  const pipeline: any[] = [
-    // Match bookings theo điều kiện
-    { $match: matchCondition },
-    // Lookup room information
-    {
-      $lookup: {
-        from: "rooms",
-        localField: "roomId",
-        foreignField: "_id",
-        as: "room",
-      },
+  // --- 2. Query Prisma ---
+  const bookings = await prisma.booking.findMany({
+    where: whereCondition,
+    include: {
+      room: { select: { id: true, name: true, hotelId: true } },
+      bookingPricings: true,
+      items: { include: { utility: true } },
     },
-    { $unwind: "$room" },
+    orderBy: { createdAt: "desc" },
+  });
 
-    // Lookup utilities information
-    {
-      $lookup: {
-        from: "utilities",
-        localField: "items.utilitiesId",
-        foreignField: "_id",
-        as: "utilities",
-      },
-    },
+  // --- 3. Map kết quả + tính tổng ---
+  return bookings.map((b) => {
+    const totalRoomPrice = b.bookingPricings.reduce(
+      (sum, p) => sum + (p.calculatedAmount ?? 0),
+      0
+    );
 
-    // Lookup booking pricing
-    {
-      $lookup: {
-        from: "bookingpricings",
-        localField: "_id",
-        foreignField: "bookingId",
-        as: "bookingPricing",
-      },
-    },
+    const totalUtilitiesPrice = b.items.reduce((sum, item) => {
+      const price = item.utility?.price ?? 0;
+      const quantity = item.quantity ?? 1;
+      return sum + price * quantity;
+    }, 0);
 
-    // Project để format giống như bill
-    {
-      $project: {
-        _id: 1,
-        roomName: "$room.name",
-        hotelId: "$room.hotelId",
-        createdAt: 1,
-        checkin: 1,
-        checkout: 1,
-
-        // Tính tổng tiền phòng từ booking pricing
-        totalRoomPrice: {
-          $sum: "$bookingPricing.calculatedAmount",
-        },
-
-        // Tính tổng tiền utilities
-        totalUtilitiesPrice: {
-          $sum: {
-            $map: {
-              input: "$items",
-              as: "item",
-              in: {
-                $let: {
-                  vars: {
-                    utility: {
-                      $arrayElemAt: [
-                        {
-                          $filter: {
-                            input: "$utilities",
-                            cond: { $eq: ["$$this._id", "$$item.utilitiesId"] },
-                          },
-                        },
-                        0,
-                      ],
-                    },
-                  },
-                  in: {
-                    $multiply: [
-                      "$$item.quantity",
-                      { $ifNull: ["$$utility.price", 0] },
-                    ],
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-
-    // Sort by createdAt descending (mới nhất trước)
-    {
-      $sort: { createdAt: -1 },
-    },
-  ];
-
-  const bookings = await Booking.aggregate(pipeline);
-  return bookings;
+    return {
+      id: b.id,
+      roomName: b.room.name,
+      hotelId: b.room.hotelId,
+      createdAt: b.createdAt,
+      checkin: b.checkin,
+      checkout: b.checkout,
+      totalRoomPrice,
+      totalUtilitiesPrice,
+    };
+  });
 };

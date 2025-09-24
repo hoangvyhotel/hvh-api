@@ -1,7 +1,7 @@
 import { RoomModel } from "@/models/Room";
 import { CreateRoomRequest } from "@/types/request/room/CreateRoomRequest.type";
 import { Types } from "mongoose";
-import * as roomDb from "@/db/room.db";
+import * as roomDb from "@/db/room-prisma.db";
 import { BodyRequest, ParamsRequest, QueryRequest } from "@/types/request";
 import {
   GetRoomAvailableResponse,
@@ -13,37 +13,42 @@ import { BaseResponse } from "@/types/response";
 import { AppError } from "@/utils/AppError";
 import { UpdateRangePrice } from "@/types/request/room/UpdateRangePriceRequest.type";
 import { UpdateRoomRequest } from "@/types/request/room/UpdateRoomRequest.type";
+import { PrismaClient } from "../generated/prisma";
+import { Room } from "@/generated/prisma";
+const prisma = new PrismaClient();
 
 // CREATE - Tạo room mới
 export async function create(request: CreateRoomRequest) {
-  const newRoom = new RoomModel({
-    ...request,
-    status: true, // Mặc định phòng được tạo mới là có sẵn
+  // Prisma không cần new Model như mongoose
+  const newRoom = await prisma.room.create({
+    data: {
+      floor: request.floor,
+      name: request.name,
+      originalPrice: request.originalPrice,
+      afterHoursPrice: request.afterHoursPrice,
+      dayPrice: request.dayPrice,
+      nightPrice: request.nightPrice,
+      description: request.description,
+      typeHire: request.typeHire ?? 0, // default nếu không truyền
+      status: true, // mặc định phòng có sẵn
+      hotelId: Number(request.hotelId),
+    },
   });
 
-  return roomDb.saveRoom(newRoom);
+  return newRoom;
 }
 
 export async function updateRoom(id: string, roomData: UpdateRoomRequest) {
-  if (!Types.ObjectId.isValid(id)) {
-    throw AppError.badRequest("ID phòng không hợp lệ");
-  }
-
   const room = await roomDb.findRoomById(id);
   if (!room) {
     throw AppError.notFound("Không tìm thấy phòng với ID đã cho");
   }
 
-  Object.assign(room, roomData);
-  await roomDb.updateRoomById(id, room);
+  await roomDb.updateRoomById(id, roomData);
   return getRoomById(id);
 }
 
 export async function updateStatus(id: string, status: boolean) {
-  if (!Types.ObjectId.isValid(id)) {
-    throw AppError.badRequest("ID phòng không hợp lệ");
-  }
-
   const room = await roomDb.findRoomById(id);
   if (!room) {
     throw AppError.notFound("Không tìm thấy phòng với ID đã cho");
@@ -52,19 +57,19 @@ export async function updateStatus(id: string, status: boolean) {
   await roomDb.updateRoomStatus(id, status);
 }
 
-export async function softDeleteRoom(id: string) {
-  if (!Types.ObjectId.isValid(id)) {
-    throw AppError.badRequest("ID phòng không hợp lệ");
-  }
+// export async function softDeleteRoom(id: string) {
+//   if (!Types.ObjectId.isValid(id)) {
+//     throw AppError.badRequest("ID phòng không hợp lệ");
+//   }
 
-  const room = await roomDb.findRoomById(id);
-  if (!room) {
-    throw AppError.notFound("Không tìm thấy phòng với ID đã cho");
-  }
+//   const room = await roomDb.findRoomById(id);
+//   if (!room) {
+//     throw AppError.notFound("Không tìm thấy phòng với ID đã cho");
+//   }
 
-  room.status = false;
-  return roomDb.updateRoomById(id, room);
-}
+//   room.status = false;
+//   return roomDb.updateRoomById(id, room);
+// }
 
 export async function hardDeleteRoom(id: string) {
   if (!Types.ObjectId.isValid(id)) {
@@ -78,12 +83,6 @@ export const getAllRoomsByHotelId = async (
   req: ParamsRequest<{ id: string }>
 ): Promise<RoomResponseWithHotel> => {
   const { id } = req.params;
-
-  if (!Types.ObjectId.isValid(id)) {
-    throw AppError.badRequest(
-      "Có lỗi khi tìm kiếm khách sạn tương ứng với phòng"
-    );
-  }
 
   const rooms = await roomDb.getRoomsByHotelId(id);
 
@@ -103,19 +102,9 @@ export const getAllRooms = async (
 ): Promise<RoomResponseWithHotel> => {
   const { id, isGetAll = "false" } = req.query;
 
-  if (!Types.ObjectId.isValid(id)) {
-    throw AppError.badRequest(
-      "Có lỗi khi tìm kiếm khách sạn tương ứng với phòng"
-    );
-  }
-
   const isGetAllBool = isGetAll === "true";
 
   const rooms = await roomDb.getRoomsByHotelId(id, isGetAllBool);
-
-  if (!rooms || rooms.length === 0) {
-    throw new Error("Không tìm thấy phòng tương ứng với khách sạn này");
-  }
 
   return ResponseHelper.success(
     rooms,
@@ -125,23 +114,19 @@ export const getAllRooms = async (
 };
 
 export const getRoomById = async (id: string): Promise<RoomResponse> => {
-  if (!Types.ObjectId.isValid(id)) {
-    throw AppError.badRequest("ID phòng không hợp lệ");
-  }
-
   const room = await roomDb.findRoomById(id);
   if (!room) {
     throw AppError.notFound("Không tìm thấy phòng với ID đã cho");
   }
   return {
-    id: room._id.toString(),
+    id: room.id.toString(),
     floor: room.floor,
     name: room.name,
     originalPrice: room.originalPrice,
     afterHoursPrice: room.afterHoursPrice,
     dayPrice: room.dayPrice,
     nightPrice: room.nightPrice,
-    description: room.description,
+    description: room.description ?? "",
     typeHire: room.typeHire,
     status: room.status,
     hotelId: room.hotelId.toString(),
@@ -155,8 +140,8 @@ export const updateRangePrice = async (
 ): Promise<BaseResponse<null>> => {
   const { data, typePrice } = req.body;
 
-  let fieldName = "";
-  let fieldName_original: string | null = null;
+  let fieldName: keyof Room;
+  let fieldName_original: keyof Room | null = null;
 
   switch (typePrice) {
     case "hours":
@@ -183,38 +168,43 @@ export const updateRangePrice = async (
   return ResponseHelper.success(null, "Cập nhật thành công");
 };
 
-
 export const getRoomAvailable = async (
   req: QueryRequest<{ roomId: string; hotelId: string }>
 ): Promise<GetRoomAvailableResponse> => {
   const { roomId, hotelId } = req.query;
-  if (!Types.ObjectId.isValid(roomId)) {
-    throw AppError.badRequest("ID phòng không hợp lệ");
-  }
 
   const data = (await roomDb.getRoomAvailable(roomId, hotelId)) ?? [];
   return ResponseHelper.success(data, "Lấy danh sách phòng có sẵn thành công");
 };
 
 export const changeRoomToAvailable = async (roomId: string) => {
-  if (!Types.ObjectId.isValid(roomId)) {
+  const id = parseInt(roomId, 10);
+
+  if (isNaN(id)) {
     throw AppError.badRequest("ID phòng không hợp lệ");
   }
-  const room = await roomDb.findRoomById(roomId);
+
+  // Kiểm tra phòng tồn tại
+  const room = await prisma.room.findUnique({
+    where: { id },
+  });
   if (!room) {
     throw AppError.notFound("Không tìm thấy phòng với ID đã cho");
   }
 
-  const updatedRoom = await RoomModel.findByIdAndUpdate(
-    roomId,
-    { typeHire: 0 },
-    { new: true }
-  );
+  // Cập nhật typeHire = 0 (available)
+  const updatedRoom = await prisma.room.update({
+    where: { id },
+    data: { typeHire: 0 },
+  });
+
   return updatedRoom;
 };
 
 export const getHotelIdByRoomId = async (roomId: string) => {
-  if (!Types.ObjectId.isValid(roomId)) {
+  const id = parseInt(roomId, 10);
+
+  if (isNaN(id)) {
     throw AppError.badRequest("ID phòng không hợp lệ");
   }
   const room = await roomDb.findRoomById(roomId);

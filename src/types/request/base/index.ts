@@ -2,9 +2,13 @@ import { CodeStatus } from "@/constant/constant";
 import { Request } from "express";
 
 export interface AuthenticatedUser {
+  id: string;
   userId: string;
   userName: string;
   email: string;
+  role?: string;
+  hotelId?: string;
+  hotelName?: string;
   status: string;
 }
 

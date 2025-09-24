@@ -11,7 +11,7 @@ import {
 } from "@/types/response/expense";
 import { ResponseHelper } from "@/utils/response";
 import { Types } from "mongoose";
-import * as expenseDb from "@/db/expense.db";
+import * as expenseDb from "@/db/expense-prisma.db";
 import {
   ExpenseCreateRequest,
   ExpenseUpdateRequest,
@@ -25,9 +25,7 @@ export const getAllExpenses = async (
   req: QueryRequest<GetAllExpensesRequest>
 ): Promise<ExpenseResponse> => {
   const { id, date } = req.query;
-  if (!Types.ObjectId.isValid(id)) {
-    throw new Error("Có lỗi khi tìm kiếm chi phí tương ứng với khách sạn");
-  }
+
   const [year, month] = date.split("-").map(Number);
 
   const startDate = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
@@ -46,9 +44,7 @@ export const getMonthlyExpenseTotal = async (
   req: BodyRequest<{ hotelId: string; month: string; year?: string }>
 ): Promise<BaseResponse<{ total: number }>> => {
   const { hotelId, month, year } = req.body;
-  if (!Types.ObjectId.isValid(hotelId)) {
-    throw AppError.badRequest("ID khách sạn không hợp lệ");
-  }
+
   const _year = year ? Number(year) : new Date().getUTCFullYear();
   const _month = Number(month);
   if (!_month || _month < 1 || _month > 12) {
@@ -75,7 +71,7 @@ export const createExpense = async (
   req: BodyRequest<ExpenseCreateRequest>
 ): Promise<ExpenseCreateResponse> => {
   const data = req.body;
-  if (!data.hotelId || !Types.ObjectId.isValid(data.hotelId)) {
+  if (!data.hotelId) {
     throw new Error("ID khách sạn không hợp lệ");
   }
   await hotelService.existingHotel(data.hotelId);
@@ -84,7 +80,7 @@ export const createExpense = async (
     amount: data.amount,
     reason: data.reason,
     note: data.note || "",
-    hotelId: new Types.ObjectId(data.hotelId),
+    hotelId: Number(data.hotelId),
   };
   const expense = await expenseDb.createExpense(expenseData);
   if (!expense) {
@@ -104,9 +100,6 @@ export const updateExpense = async (
   const data = req.body;
   console.log("Updating expense with ID:", id);
 
-  if (!Types.ObjectId.isValid(id)) {
-    throw AppError.badRequest("ID chi phí không hợp lệ");
-  }
   const expenseData = {
     date: new Date(data.date),
     amount: data.amount,
@@ -138,9 +131,6 @@ export const deleteExpense = async (
   req: ParamsRequest<{ id: string }>
 ): Promise<BaseResponse<null>> => {
   const id = req.params.id;
-  if (!Types.ObjectId.isValid(id)) {
-    throw AppError.badRequest("ID chi phí không hợp lệ");
-  }
 
   const expense = await expenseDb.existingExpense(id);
   if (!expense) {

@@ -1,4 +1,3 @@
-import { getRoomAvailable } from "@/services/room.service";
 import { BaseResponse } from "./base";
 
 export interface RoomResponse {

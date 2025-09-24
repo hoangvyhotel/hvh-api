@@ -1,4 +1,4 @@
-import * as db from "@/db/bill.db";
+import * as db from "@/db/bill-prisma.db";
 import { AppError } from "@/utils/AppError";
 import { RoomModel } from "@/models/Room";
 import { Types } from "mongoose";
@@ -8,7 +8,9 @@ import * as bookingDb from "@/db/booking.db";
 import * as bookingPrincingDb from "@/db/booking-princing.db";
 import { ParamsRequest } from "@/types/request";
 import { changeRoomToAvailable, getHotelIdByRoomId } from "./room.service";
-import { getRoomsByHotelId } from "@/db/room.db";
+import { getRoomsByHotelId } from "@/db/room-prisma.db";
+import { PrismaClient } from "../generated/prisma";
+const prisma = new PrismaClient();
 
 export class BillService {
   async getDailyTotals(month: number, year?: number, hotelId?: string) {
@@ -29,16 +31,19 @@ export class BillService {
     let roomIdSet: Set<string> | null = null;
     if (hotelId) {
       const hotelIdCandidates: any[] = [];
-      if (Types.ObjectId.isValid(hotelId)) {
-        hotelIdCandidates.push(new Types.ObjectId(hotelId));
+      const hid = parseInt(hotelId, 10);
+
+      if (isNaN(hid)) {
+        throw AppError.badRequest("Hotel ID không hợp lệ");
       }
       // also allow string match
       hotelIdCandidates.push(hotelId);
 
-      const rooms = await RoomModel.find(
-        { hotelId: { $in: hotelIdCandidates } },
-        { _id: 1 }
-      ).lean();
+      const rooms = await prisma.room.findMany({
+        where: { hotelId: hid },
+        select: { id: true },
+      });
+
       const roomIds = rooms.map((r: any) => r._id).filter(Boolean);
       roomIdSet = new Set<string>(roomIds.map((id: any) => id.toString()));
       // if no rooms, return empty days
@@ -160,22 +165,24 @@ export class BillService {
     const start = new Date(y, month - 1, 1);
     const end = new Date(y, month, 1);
 
-    // prepare roomIdSet if hotelId provided (same logic as daily)
-    let roomIdSet: Set<string> | null = null;
+    // Nếu có hotelId → lấy danh sách roomId
+    let roomIdSet: Set<number> | null = null;
     if (hotelId) {
-      const hotelIdCandidates: any[] = [];
-      if (Types.ObjectId.isValid(hotelId)) {
-        hotelIdCandidates.push(new Types.ObjectId(hotelId));
+      const hid = parseInt(hotelId, 10);
+      if (isNaN(hid)) {
+        throw AppError.badRequest("Hotel ID không hợp lệ");
       }
-      hotelIdCandidates.push(hotelId);
-      const rooms = await RoomModel.find(
-        { hotelId: { $in: hotelIdCandidates } },
-        { _id: 1 }
-      ).lean();
-      const roomIds = rooms.map((r: any) => r._id).filter(Boolean);
-      if (roomIds.length === 0)
+
+      const rooms = await prisma.room.findMany({
+        where: { hotelId: hid },
+        select: { id: true },
+      });
+
+      if (rooms.length === 0) {
         return { totals: { totalRoom: 0, totalUtilities: 0, total: 0 } };
-      roomIdSet = new Set<string>(roomIds.map((id: any) => id.toString()));
+      }
+
+      roomIdSet = new Set<number>(rooms.map((r: { id: any }) => r.id));
     }
 
     // fetch raw bills and sum
@@ -218,11 +225,6 @@ export class BillService {
       throw AppError.badRequest("roomId is required");
     }
 
-    // Validate roomId format
-    if (!Types.ObjectId.isValid(roomId)) {
-      throw AppError.badRequest("roomId không hợp lệ");
-    }
-
     // Get booking information from roomId
     const bookingInfo = await bookingDb.getBookingInfo(req);
 
@@ -263,9 +265,7 @@ export class BillService {
 
     // Lưu xong bill. xóa booking và booking pricing, cập nhật lại trạng thái phòng
     await bookingDb.deleteBooking(bookingInfo.BookingId.toString());
-    await bookingPrincingDb.deleteBookingPricing(
-      bookingInfo.BookingId.toString()
-    );
+    await bookingPrincingDb.deleteBookingPricing(Number(bookingInfo.BookingId));
 
     // reset room status to 'available'
     await changeRoomToAvailable(roomId);
@@ -275,15 +275,17 @@ export class BillService {
 
   async getBill(id: string) {
     if (!id) throw AppError.badRequest("Id is required");
-    const bill = await db.getBillById(id);
+    const bill = await db.getBillById(Number(id));
     if (!bill) throw AppError.notFound("Bill not found");
     return bill;
   }
 
-  async updateBill(id: string, update: UpdateBillRequest) {
+  async updateBill(id: number, update: UpdateBillRequest) {
     if (!id) throw AppError.badRequest("Id là bắt buộc");
-    if (!update || Object.keys(update).length === 0)
+    if (!update || Object.keys(update).length === 0) {
       throw AppError.badRequest("Dữ liệu cập nhật không được để trống");
+    }
+
     if (
       update.totalRoomPrice != null &&
       typeof update.totalRoomPrice !== "number"
@@ -292,43 +294,43 @@ export class BillService {
     }
 
     const toUpdate: any = { ...update };
-    if (toUpdate.createdAt)
+
+    if (toUpdate.createdAt) {
       toUpdate.createdAt = new Date(toUpdate.createdAt as any);
+    }
 
     const bill = await db.updateBillById(id, toUpdate);
     if (!bill) throw AppError.notFound("Bill not found");
+
     return bill;
   }
 
-  async deleteBill(id: string) {
-    if (!id) throw AppError.badRequest("Id is required");
+  async deleteBill(id: number) {
+    if (!id) throw AppError.badRequest("Id là bắt buộc");
+
     const bill = await db.deleteBillById(id);
     if (!bill) throw AppError.notFound("Bill not found");
+
     return bill;
   }
 
-  async listBills(hotelId?: string, dateStr?: string) {
+  async listBills(hotelId?: number, dateStr?: string) {
     if (!hotelId) {
       throw AppError.badRequest("hotelId is required");
     }
 
-    if (!Types.ObjectId.isValid(hotelId)) {
-      throw AppError.badRequest("hotelId không hợp lệ");
-    }
-
-    const rooms = await getRoomsByHotelId(hotelId);
+    // Lấy danh sách phòng thuộc hotelId
+    const rooms = await getRoomsByHotelId(hotelId.toString());
     const bookingRooms = rooms.filter((room) => room.typeHire > 0);
-    const bookingRoomIds = bookingRooms.map((room) => room.id.toString());
+    const bookingRoomIds = bookingRooms.map((room) => room.id);
 
     // Lấy cả bookings (đang diễn ra) và bills (đã thanh toán)
     const [bookings, bills] = await Promise.all([
-      bookingDb.getBookingsByRoomIds(bookingRoomIds, dateStr!),
+      bookingDb.getBookingsByRoomIds(bookingRoomIds, dateStr),
       db.getBillsByHotelId(hotelId, dateStr!),
     ]);
 
-    console.log("bills", bills);
     // Gộp bookings và bills thành một mảng
-    // Thêm field 'type' để phân biệt
     const bookingsWithType = bookings.map((booking: any) => ({
       ...booking,
       type: "booking",
@@ -343,7 +345,7 @@ export class BillService {
       (a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
-console.log("allRecords", allRecords);
+
     return allRecords;
   }
 }

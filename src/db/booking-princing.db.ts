@@ -1,86 +1,78 @@
-import BookingPricing, {
-  IBookingPricing,
-  PricingHistory,
-} from "@/models/BookingPricing";
-import { BookingPricingData } from "@/services/booking.service";
-import { Note, Surcharge } from "@/types/response/booking";
-import { UpdateBookingPricingInput } from "@/types/response/bookingPricing";
 import { AppError } from "@/utils/AppError";
-import mongoose, { Schema, Types } from "mongoose";
+import { BookingPricingData } from "@/services/booking.service";
+import { UpdateBookingPricingInput } from "@/types/response/bookingPricing";
+import { Note } from "@/types/response/booking";
+import { $Enums, Prisma, PrismaClient } from "../generated/prisma";
+const prisma = new PrismaClient();
 
-// booking-princing.db.ts
-export const createBookingPricing = async (
-  data: BookingPricingData,
-  session?: any
-): Promise<any> => {
-  try {
-    const { bookingId, priceType, startTime, amount } = data;
+// CREATE
+export const createBookingPricing = async (data: BookingPricingData) => {
+  const { bookingId, priceType, startTime, amount } = data;
 
-    // Kiểm tra bookingId hợp lệ
-    if (!Types.ObjectId.isValid(bookingId)) {
-      throw AppError.badRequest("ID booking không hợp lệ");
-    }
+  // Validate
+  if (!bookingId || isNaN(Number(bookingId))) {
+    throw AppError.badRequest("ID booking không hợp lệ");
+  }
 
-    // Kiểm tra priceType hợp lệ
-    const validPriceTypes = ["HOUR", "DAY", "NIGHT"];
-    if (!validPriceTypes.includes(priceType)) {
-      throw AppError.badRequest("Loại giá không hợp lệ");
-    }
+  const validPriceTypes = ["HOUR", "DAY", "NIGHT"];
+  if (!validPriceTypes.includes(priceType)) {
+    throw AppError.badRequest("Loại giá không hợp lệ");
+  }
 
-    // Kiểm tra amount
-    if (typeof amount !== "number" || amount < 0) {
-      throw AppError.badRequest("Số tiền không hợp lệ");
-    }
+  if (typeof amount !== "number" || amount < 0) {
+    throw AppError.badRequest("Số tiền không hợp lệ");
+  }
 
-    // Kiểm tra startTime
-    if (!(startTime instanceof Date) || isNaN(startTime.getTime())) {
-      throw AppError.badRequest("Thời gian bắt đầu không hợp lệ");
-    }
+  if (!(startTime instanceof Date) || isNaN(startTime.getTime())) {
+    throw AppError.badRequest("Thời gian bắt đầu không hợp lệ");
+  }
 
-    // Tạo bản ghi lịch sử cho hành động CREATE
-    const historyRecord: PricingHistory = {
-      action: "CREATE",
-      priceType,
-      amount,
-      description: `Tạo chi tiết giá ${priceType} với số tiền ${amount}`,
-      appliedFrom: new Date(),
-      appliedFirstHourPrice: priceType === "HOUR" ? amount : 0,
-      appliedNextHourPrice: 0,
-      appliedDayPrice: priceType === "DAY" ? amount : 0,
-      appliedNightPrice: priceType === "NIGHT" ? amount : 0,
-    };
+  const historyRecord = {
+    action: $Enums.PricingAction.CREATE,
+    priceType,
+    amount,
+    description: `Tạo chi tiết giá ${priceType} với số tiền ${amount}`,
+    appliedFrom: new Date(),
+    appliedFirstHourPrice: priceType === "HOUR" ? amount : 0,
+    appliedNextHourPrice: 0,
+    appliedDayPrice: priceType === "DAY" ? amount : 0,
+    appliedNightPrice: priceType === "NIGHT" ? amount : 0,
+  };
 
-    // Tạo dữ liệu BookingPricing
-    const pricingData: Partial<IBookingPricing> = {
-      bookingId: new Types.ObjectId(bookingId),
+  const added = await prisma.bookingPricing.create({
+    data: {
+      bookingId: Number(bookingId),
       priceType,
       startTime,
       calculatedAmount: amount,
-      history: [historyRecord],
-    };
+      history: { create: [historyRecord] },
+    },
+  });
 
-    // Tạo bản ghi trong cơ sở dữ liệu
-    const added = await BookingPricing.create([pricingData], { session });
-    return added[0];
-  } catch (error) {
-    console.error("Lỗi khi thêm chi tiết giá:", error);
-    throw AppError.internal("Không thể tạo chi tiết giá");
-  }
+  return added;
 };
-export const getBookingPrincing = async (id: string): Promise<any> => {
-  if (!Types.ObjectId.isValid(id)) {
-    throw AppError.badRequest("ID phòng không hợp lệ");
+
+// READ
+export const getBookingPricing = async (id: number) => {
+  if (!id || isNaN(id)) {
+    throw AppError.badRequest("ID chi tiết giá không hợp lệ");
   }
-  const bookinPrincing = await BookingPricing.findById(id).lean();
-  if (!bookinPrincing) {
+
+  const bookingPricing = await prisma.bookingPricing.findUnique({
+    where: { id },
+  });
+
+  if (!bookingPricing) {
     throw AppError.notFound("Không tìm thấy chi tiết giá");
   }
-  return bookinPrincing;
+
+  return bookingPricing;
 };
 
+// UPDATE
 export const updateBookingPricing = async (
   input: UpdateBookingPricingInput
-): Promise<IBookingPricing> => {
+) => {
   const {
     bookingId,
     roomId,
@@ -96,29 +88,17 @@ export const updateBookingPricing = async (
     appliedNightPrice = 0,
   } = input;
 
-  const bookingObjectId = new Types.ObjectId(bookingId);
-  const roomObjectId = roomId ? new Types.ObjectId(roomId) : undefined;
+  const bookingIdNum = Number(bookingId);
+  const roomIdNum = roomId ? Number(roomId) : undefined;
 
-  // tìm BookingPricing theo bookingId + roomId
-  let bookingPricing = await BookingPricing.findOne({
-    bookingId: bookingObjectId,
-    ...(roomObjectId ? { roomId: roomObjectId } : {}),
+  let bookingPricing = await prisma.bookingPricing.findFirst({
+    where: {
+      bookingId: bookingIdNum,
+      ...(roomIdNum ? { roomId: roomIdNum } : {}),
+    },
   });
 
-  // nếu chưa có thì tạo mới
-  if (!bookingPricing) {
-    bookingPricing = new BookingPricing({
-      bookingId: bookingObjectId,
-      roomId: roomObjectId,
-      priceType,
-      startTime: appliedFrom || new Date(),
-      calculatedAmount: amount,
-      history: [],
-    });
-  }
-
-  // tạo record history
-  const history: PricingHistory = {
+  const history = {
     action,
     priceType,
     amount,
@@ -131,42 +111,68 @@ export const updateBookingPricing = async (
     appliedNightPrice,
   };
 
-  // push history vào mảng
-  bookingPricing.history.push(history);
-
-  // cập nhật các field chính
-  bookingPricing.priceType = priceType;
-  bookingPricing.calculatedAmount = amount;
-  if (appliedTo) bookingPricing.endTime = appliedTo;
-
-  // lưu lại
-  await bookingPricing.save();
+  if (!bookingPricing) {
+    bookingPricing = await prisma.bookingPricing.create({
+      data: {
+        bookingId: bookingIdNum,
+        roomId: roomIdNum,
+        priceType,
+        startTime: appliedFrom || new Date(),
+        calculatedAmount: amount,
+        history: { create: [history] },
+      },
+    });
+  } else {
+    bookingPricing = await prisma.bookingPricing.update({
+      where: { id: bookingPricing.id },
+      data: {
+        priceType,
+        calculatedAmount: amount,
+        endTime: appliedTo,
+        history: {
+          create: [history],
+        },
+      },
+      include: {
+        history: true,
+      },
+    });
+  }
 
   return bookingPricing;
 };
 
-export const addNote = async (data: Note) => {
-  const bookingPricing = await BookingPricing.findById(
-    data.BookingPricingId
-  );
-  if (!bookingPricing) {
-    throw AppError.notFound("Thao tác thất bại!");
-  }
-};
-
+// DELETE
 export const deleteBookingPricing = async (
-  bookingId: string
+  bookingId: number
 ): Promise<void> => {
-  if (!Types.ObjectId.isValid(bookingId)) {
+  if (!bookingId || isNaN(bookingId)) {
     throw AppError.badRequest("ID booking không hợp lệ");
   }
 
-  const bookingPricings = await BookingPricing.find({
-    bookingId: new Types.ObjectId(bookingId),
+  const bookingPricings = await prisma.bookingPricing.findMany({
+    where: { bookingId },
   });
 
   if (bookingPricings.length === 0) {
     throw AppError.notFound("Không tìm thấy chi tiết giá cho booking này");
   }
-  await BookingPricing.deleteMany({ bookingId: new Types.ObjectId(bookingId) });
+
+  await prisma.bookingPricing.deleteMany({
+    where: { bookingId },
+  });
+};
+
+// NOTE
+export const addNote = async (data: Note) => {
+  const bookingPricing = await prisma.bookingPricing.findUnique({
+    where: { id: Number(data.BookingPricingId) },
+  });
+
+  if (!bookingPricing) {
+    throw AppError.notFound("Thao tác thất bại!");
+  }
+
+  // tuỳ bạn muốn update note vào trường nào
+  return bookingPricing;
 };

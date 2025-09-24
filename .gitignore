@@ -96,3 +96,4 @@ uploads/
 Thumbs.db
 
 .github/
+/src/generated/prisma

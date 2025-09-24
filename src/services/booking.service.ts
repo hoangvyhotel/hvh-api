@@ -2,7 +2,6 @@ import {
   AuthenticatedRequest,
   BodyRequest,
   ParamsRequest,
-  QueryRequest,
 } from "@/types/request";
 import {
   BookingItemResponse,
@@ -12,22 +11,17 @@ import {
   Surcharge,
 } from "@/types/response/booking";
 import * as bookingDb from "../db/booking.db";
-import * as bookingItemDb from "../db/bookingItem.db";
 import { ResponseHelper } from "@/utils/response";
 import { BaseResponse } from "@/types/response";
 import * as bookingPrincingDb from "../db/booking-princing.db";
 import * as roomDb from "../db/room.db";
 import * as utilityDb from "../db/utility.db";
 import { AppError } from "@/utils/AppError";
-import { Types } from "mongoose";
 import { RoomModel } from "@/models/Room";
-import { asyncWrapProviders } from "async_hooks";
-import BookingPricing from "@/models/BookingPricing";
-import Utility from "@/models/Utility";
-import Booking from "@/models/Booking";
-import { IUtility } from "@/models/Utility";
+import { PrismaClient } from "../generated/prisma";
+const prisma = new PrismaClient();
 export interface BookingPricingData {
-  bookingId: Types.ObjectId;
+  bookingId: number;
   priceType: "HOUR" | "DAY" | "NIGHT";
   startTime: Date;
   amount: number;
@@ -47,10 +41,6 @@ export const addBooking = async (
 
   try {
     const { roomId, type } = req.body;
-    console.log(req.body);
-    if (!Types.ObjectId.isValid(roomId)) {
-      throw AppError.badRequest("ID phòng không hợp lệ");
-    }
     if (!["HOUR", "DAY", "NIGHT"].includes(type)) {
       throw AppError.badRequest("Loại booking không hợp lệ");
     }
@@ -68,17 +58,14 @@ export const addBooking = async (
 
     const { amount, typeHire } = pricingMap[type];
 
-    const bookingAdded = await bookingDb.AddBooking(roomId, session);
+    const bookingAdded = await bookingDb.AddBooking(roomId);
 
-    await bookingPrincingDb.createBookingPricing(
-      {
-        bookingId: bookingAdded._id,
-        priceType: type as "HOUR" | "DAY" | "NIGHT",
-        startTime: bookingAdded.createdAt!,
-        amount,
-      },
-      session
-    );
+    await bookingPrincingDb.createBookingPricing({
+      bookingId: Number(bookingAdded.id),
+      priceType: type as "HOUR" | "DAY" | "NIGHT",
+      startTime: bookingAdded.createdAt!,
+      amount,
+    });
 
     await roomDb.updateTypeHireRoom(roomId, typeHire, session);
 
@@ -119,12 +106,15 @@ export const AddSurcharge = async (
   req: BodyRequest<Surcharge>
 ): Promise<BaseResponse<null>> => {
   const data = req.body;
-  console.log("data", data);
-  if (!data.BookingId && !Types.ObjectId.isValid(data.BookingId!)) {
+  if (!data.BookingId) {
     throw AppError.badRequest("ID phòng không hợp lệ");
   }
+  await bookingDb.addSurcharge({
+    BookingId: data.BookingId!, // dùng "!" để khẳng định không undefined
+    Content: data.Content!,
+    Amount: data.Amount!,
+  });
 
-  await bookingDb.addSurcharge(data);
   return ResponseHelper.success(null, "Thêm phụ thu thành công");
 };
 
@@ -133,7 +123,7 @@ export const AddNote = async (
 ): Promise<BaseResponse<null>> => {
   const data = req.body;
   const { id } = req.params;
-  if (!id && !Types.ObjectId.isValid(id!)) {
+  if (!id) {
     throw AppError.badRequest("ID phòng không hợp lệ");
   }
 
@@ -147,21 +137,35 @@ export const AddUtility = async (
 ): Promise<BaseResponse<null>> => {
   const { utilityId, bookingId, quantity = 1 } = req.body;
 
-  if (
-    !Types.ObjectId.isValid(bookingId) ||
-    !Types.ObjectId.isValid(utilityId)
-  ) {
-    throw AppError.badRequest("ID không hợp lệ");
+  // Validate input
+  if (!utilityId || !bookingId) {
+    throw AppError.badRequest("Thiếu utilityId hoặc bookingId");
   }
 
-  // Lấy thông tin utility (giá, tên)
-  const utility = await Utility.findById(utilityId).lean();
+  // Kiểm tra booking có tồn tại không
+  const booking = await prisma.booking.findUnique({
+    where: { id: Number(bookingId) },
+  });
+  if (!booking) {
+    throw AppError.notFound("Không tìm thấy booking");
+  }
+
+  // Kiểm tra utility có tồn tại không
+  const utility = await prisma.utility.findUnique({
+    where: { id: Number(utilityId) },
+  });
   if (!utility) {
     throw AppError.notFound("Không tìm thấy dịch vụ/tiện ích");
   }
 
-  // Thêm utility vào booking + update giá bookingPricing
-  await bookingDb.addUtility(bookingId, utility, quantity);
+  // Thêm utility vào booking items
+  await prisma.bookingItem.create({
+    data: {
+      bookingId: Number(bookingId),
+      utilitiesId: Number(utilityId),
+      quantity,
+    },
+  });
 
   return ResponseHelper.success(null, "Thêm tiện ích thành công");
 };
@@ -172,15 +176,8 @@ export const RemoveUtilityService = async (
   const { bookingId, utilityId, quantity = 1 } = req.body;
   console.log(req.body);
 
-  if (
-    !Types.ObjectId.isValid(bookingId) ||
-    !Types.ObjectId.isValid(utilityId)
-  ) {
-    throw AppError.badRequest("ID không hợp lệ");
-  }
-
   try {
-    await bookingDb.removeUtility(bookingId, utilityId, quantity);
+    await bookingDb.removeUtility(bookingId, Number(utilityId), quantity);
     return ResponseHelper.success(null, "Xóa/giảm tiện ích thành công");
   } catch (error: any) {
     throw AppError.internal(error?.message || "Xảy ra lỗi khi xóa tiện ích");
@@ -191,9 +188,6 @@ export const removeBooking = async (
   req: ParamsRequest<{ id: string }>
 ): Promise<BaseResponse<null>> => {
   const { id } = req.params;
-  if (!Types.ObjectId.isValid(id)) {
-    throw AppError.badRequest("ID không hợp lệ");
-  }
   try {
     await bookingDb.deleteBooking(id);
     return ResponseHelper.success(null, "Hủy phòng thành công");
@@ -207,30 +201,28 @@ export const getBookings = async (): Promise<any> => {
 };
 
 // Implementation hoàn chỉnh cho getRentalBookings
-export const getRentalBookings = async (): Promise<any> => {
+export const getRentalBookings = async (): Promise<BaseResponse<BookingItemResponse[]>> => {
   const bookings = await bookingDb.getBookings();
 
-  // Sử dụng Promise.all để xử lý tất cả bookings song song
   const bookingItems: BookingItemResponse[] = await Promise.all(
     bookings.map(async (booking) => {
-      const room = booking.roomId as any; // Cast to 'any' to access room properties
-      console.log("room", room);
-      // if (!room) {
-      //   throw new Error("Không tìm thấy thông tin phòng cho booking này");
-      // }
+      const room = booking.room;
+      if (!room) {
+        throw AppError.internal("Không tìm thấy thông tin phòng cho booking này");
+      }
+
       const checkin = booking.checkin;
 
-      // Tính utilities price từ booking items với async/await
-      let utilitiesPrice = 0;
+      // Chuyển null checkout thành undefined
+      const checkout = booking.checkout ?? undefined;
 
+      // Tính tổng tiền utilities
+      let utilitiesPrice = 0;
       if (booking.items && booking.items.length > 0) {
-        // Xử lý tất cả utilities song song
         const utilitiesPromises = booking.items.map(async (item) => {
           try {
-            const utility = await utilityDb.getUtilityById(
-              item.utilitiesId.toString()
-            );
-            if (utility && utility.price && item.quantity) {
+            const utility = await utilityDb.getUtilityById(item.utilitiesId.toString());
+            if (utility?.price && item.quantity) {
               return utility.price * item.quantity;
             }
             return 0;
@@ -241,21 +233,16 @@ export const getRentalBookings = async (): Promise<any> => {
         });
 
         const utilitiesPrices = await Promise.all(utilitiesPromises);
-        utilitiesPrice = utilitiesPrices.reduce(
-          (total, price) => total + price,
-          0
-        );
+        utilitiesPrice = utilitiesPrices.reduce((total, price) => total + price, 0);
       }
 
-      console.log("utilitiesPrice", utilitiesPrice);
-
-      const roomPrice = room?.price || 0; // Lấy room price từ room info
-      const isCheckout = !!booking.checkout;
+      const roomPrice = room.originalPrice ?? 0;
+      const isCheckout = !!checkout;
 
       return {
-        roomName: room ? room.name : "Tên phòng không xác định",
+        roomName: room.name,
         checkin,
-        checkout: booking.checkout,
+        checkout, // giờ là Date | undefined
         utilitiesPrice,
         roomPrice,
         isCheckout,
@@ -263,19 +250,16 @@ export const getRentalBookings = async (): Promise<any> => {
     })
   );
 
-  return ResponseHelper.success(
-    bookingItems,
-    "Lấy danh sách booking thành công"
-  );
+  return ResponseHelper.success(bookingItems, "Lấy danh sách booking thành công");
 };
+
+
 
 export const getNoteByBooking = async (
   req: ParamsRequest<{ id: string }>
 ): Promise<BaseResponse<Note | null>> => {
   const { id } = req.params;
-  if (!Types.ObjectId.isValid(id)) {
-    throw AppError.badRequest("ID không hợp lệ");
-  }
+
   try {
     const data = await bookingDb.getNote(id);
     return ResponseHelper.success(data, "Lấy ghi chú thành công");
@@ -288,13 +272,6 @@ export const moveRoom = async (
   req: BodyRequest<{ bookingId: string; newRoomId: string }>
 ): Promise<BaseResponse<null>> => {
   const { bookingId, newRoomId } = req.body;
-  if (
-    !Types.ObjectId.isValid(bookingId) ||
-    !Types.ObjectId.isValid(newRoomId)
-  ) {
-    throw AppError.badRequest("ID không hợp lệ");
-  }
-
   await bookingDb.moveRoom(bookingId, newRoomId);
   return ResponseHelper.success(null, "Đổi phòng thành công");
 };
@@ -322,9 +299,6 @@ export const addDocumentInfo = async (
     Gender,
     EthnicGroup,
   } = req.body;
-  if (!Types.ObjectId.isValid(bookingId)) {
-    throw AppError.badRequest("ID booking không hợp lệ");
-  }
 
   // Normalize TypeID (accept TypeID or TypeId)
   const normalizedTypeID = TypeID ?? (req.body as any).TypeId ?? undefined;
@@ -351,9 +325,6 @@ export const addCarInfoService = async (
   }>
 ): Promise<BaseResponse<null>> => {
   const { bookingId, LicensePlate, Color, VehicleType } = req.body;
-  if (!Types.ObjectId.isValid(bookingId)) {
-    throw AppError.badRequest("ID booking không hợp lệ");
-  }
 
   await bookingDb.addCarInfo(bookingId, {
     LicensePlate,
@@ -368,8 +339,6 @@ export const getDocumentInfoService = async (
   req: ParamsRequest<{ id: string }>
 ): Promise<BaseResponse<any[]>> => {
   const { id } = req.params;
-  if (!Types.ObjectId.isValid(id))
-    throw AppError.badRequest("ID booking không hợp lệ");
   const docs = await bookingDb.getDocumentInfo(id);
   return ResponseHelper.success(docs, "Lấy thông tin giấy tờ thành công");
 };
@@ -378,8 +347,6 @@ export const getCarInfoService = async (
   req: ParamsRequest<{ id: string }>
 ): Promise<BaseResponse<any[]>> => {
   const { id } = req.params;
-  if (!Types.ObjectId.isValid(id))
-    throw AppError.badRequest("ID booking không hợp lệ");
   const cars = await bookingDb.getCarInfo(id);
   return ResponseHelper.success(cars, "Lấy thông tin xe thành công");
 };
@@ -400,8 +367,7 @@ export const updateDocumentInfoService = async (
   }>
 ): Promise<BaseResponse<any>> => {
   const { bookingId, docId, updates } = req.body;
-  if (!Types.ObjectId.isValid(bookingId))
-    throw AppError.badRequest("ID booking không hợp lệ");
+  if (!bookingId) throw AppError.badRequest("ID booking không hợp lệ");
 
   const updated = await bookingDb.updateDocumentInfo(
     bookingId,
@@ -426,8 +392,7 @@ export const updateCarInfoService = async (
   }>
 ): Promise<BaseResponse<any>> => {
   const { bookingId, licensePlate, updates } = req.body;
-  if (!Types.ObjectId.isValid(bookingId))
-    throw AppError.badRequest("ID booking không hợp lệ");
+  if (!bookingId) throw AppError.badRequest("ID booking không hợp lệ");
 
   const updated = await bookingDb.updateCarInfo(
     bookingId,

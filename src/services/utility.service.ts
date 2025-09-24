@@ -1,4 +1,4 @@
-import * as db from "@/db/utility.db";
+import * as db from "@/db/utility-prisma.db";
 import { AppError } from "@/utils/AppError";
 import { CreateUtilityInput } from "@/types/request/utility/utility";
 
@@ -26,24 +26,29 @@ export class UtilityService {
       throw AppError.badRequest("hotelId là bắt buộc");
     }
 
-    const filter: any = { hotelId: opts.hotelId };
-    if (typeof opts.status !== "undefined") filter.status = opts.status === "true" || opts.status === true;
+    const filter: { hotelId: number; status?: boolean } = {
+  hotelId: Number(opts.hotelId), // Ép sang number
+};
+
+if (typeof opts.status !== "undefined") {
+  filter.status = opts.status === "true" || opts.status === true;
+}
 
     const items = await db.findUtilities(filter);
     return { items };
   }
 
   async getById(id: string) {
-    return db.getUtilityById(id);
+    return db.getUtilityById(Number(id));
   }
 
   async update(id: string, payload: Partial<CreateUtilityInput>) {
-    const updated = await db.updateUtilityById(id, payload as any);
+    const updated = await db.updateUtilityById(Number(id), payload as any);
     return updated;
   }
 
   async delete(id: string) {
-    await db.deleteUtilityById(id);
+    await db.deleteUtilityById(Number(id));
     return;
   }
 }
