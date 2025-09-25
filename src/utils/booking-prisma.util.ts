@@ -1,34 +1,36 @@
-import { ClientSession } from "mongoose";
-import Booking from "@/models/Booking";
-import BookingPricing from "@/models/BookingPricing";
 import { PricingHistoryType } from "@/types/response/booking";
-import { findRoomById } from "@/db/room.db";
+import { PrismaClient } from "@/generated/prisma";
+import { AppError } from "./AppError";
+const prisma = new PrismaClient();
 
 export const calculateAndUpdatePricing = async (
-  bookingPricingId: string,
-  historyId: string,
-  roomId: string,
-  options: { session?: ClientSession } = {}
+  bookingPricingId: number,
+  historyId: number,
+  roomId: number
 ) => {
-  const bookingPricing = await BookingPricing.findById(
-    bookingPricingId
-  ).session(options.session ?? null);
-  if (!bookingPricing) throw new Error("BookingPricing not found");
+  // 1. Lấy bookingPricing từ DB, kèm history
+  const bookingPricing = await prisma.bookingPricing.findUnique({
+    where: { id: bookingPricingId },
+    include: { history: true },
+  });
 
-  // Tìm history record cụ thể bằng _id
-  const historyRecord = bookingPricing.history.find(
-    (h) => h._id?.toString() === historyId
-  );
+
+  if (!bookingPricing) {
+    throw new Error("BookingPricing not found");
+  }
+
+  // 2. Tìm history record cụ thể
+  const historyRecord = bookingPricing.history.find((h) => h.id === historyId);
 
   if (!historyRecord) {
     throw new Error("History record not found");
   }
 
-  // Convert history record to PricingHistoryType
-  const history: PricingHistoryType = {
+  // 3. Chuẩn hoá dữ liệu sang PricingHistoryType
+  const history = {
     action: historyRecord.action,
-    priceType: historyRecord.priceType,
-    amount: historyRecord.amount,
+    priceType: historyRecord.priceType ?? "",
+    amount: historyRecord.amount ?? 0,
     appliedFrom: historyRecord.appliedFrom.toISOString(),
     appliedTo: historyRecord.appliedTo?.toISOString(),
     appliedFirstHourPrice: historyRecord.appliedFirstHourPrice,
@@ -37,43 +39,100 @@ export const calculateAndUpdatePricing = async (
     appliedNightPrice: historyRecord.appliedNightPrice,
   };
 
+  // 4. Tính toán theo priceType
   let result;
-
-  // Gọi hàm tương ứng dựa trên priceType
   switch (historyRecord.priceType) {
     case "HOUR":
       result = await updateSpecificHourHistory(
-        bookingPricingId,
-        historyId,
-        roomId,
-        options
+        bookingPricingId.toString(),
+        historyId.toString(),
+        roomId.toString()
       );
       break;
 
     case "NIGHT":
-      result = await cacutaleNightAndUpdate(
-        bookingPricingId,
-        history,
-        roomId,
-        options
-      );
+      result = await cacutaleNightAndUpdate(bookingPricingId, history, roomId);
       break;
 
     case "DAY":
       result = await cacutaleDayAndUpdate(
         bookingPricingId,
         history,
-        roomId,
-        options
+        roomId.toString()
       );
       break;
 
     default:
       throw new Error(`Unsupported priceType: ${historyRecord.priceType}`);
   }
+  await recalculateBookingPricing(bookingPricing.bookingId);
 
   return result;
 };
+async function recalculateBookingPricing(bookingId: number) {
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    include: { note: true, items: true },
+  });
+  if (!booking) throw AppError.notFound("Không tìm thấy booking!");
+
+  const bookingPricing = await prisma.bookingPricing.findFirst({
+    where: { bookingId },
+    include: { history: true },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!bookingPricing) {
+    throw AppError.notFound("Không tìm thấy thông tin giá cho booking!");
+  }
+
+  // --- TÍNH TỔNG LỊCH SỬ ---
+  const totalHistory = bookingPricing.history.reduce(
+    (sum, h) => sum + (h.amount || 0),
+    0
+  );
+
+  // --- TÍNH PHỤ THU ---
+  const totalSurcharge: number = Array.isArray(booking.surcharge)
+    ? (booking.surcharge as any[]).reduce((sum, s) => {
+        if (s && typeof s === "object" && "Amount" in s) {
+          const amt = (s as any).Amount;
+          return sum + (typeof amt === "number" ? amt : 0);
+        }
+        return sum;
+      }, 0)
+    : 0;
+
+  // --- TÍNH TIỆN ÍCH ---
+  const totalUtility: number = booking.items.reduce(
+    (sum, u) => sum + (u.price || 0) * (u.quantity || 1),
+    0
+  );
+
+  // --- CỘNG TỔNG ---
+  let calculated = totalHistory + totalSurcharge + totalUtility;
+
+  // Trừ giảm giá & trả trước
+  if (booking.note?.Discount && booking.note.Discount > 0) {
+    calculated -= booking.note.Discount;
+  }
+  if (booking.note?.PayInAdvance && booking.note.PayInAdvance > 0) {
+    calculated -= booking.note.PayInAdvance;
+  }
+
+  // Nếu có giá thương lượng > 0 thì dùng luôn
+  if (booking.note?.NegotiatedPrice && booking.note.NegotiatedPrice > 0) {
+    calculated = booking.note.NegotiatedPrice;
+  }
+
+  // --- CẬP NHẬT ---
+  const updatedBookingPricing = await prisma.bookingPricing.update({
+    where: { id: bookingPricing.id },
+    data: { calculatedAmount: Math.max(0, calculated) }, // tránh âm
+  });
+
+  return { booking, bookingPricing: updatedBookingPricing };
+}
+
 
 const cacutaleTime = (appliedFrom: string, appliedTo?: string): number => {
   if (!appliedFrom) return 0;
@@ -130,174 +189,248 @@ export const cacutaleHour = (
 };
 
 export const cacutaleNightAndUpdate = async (
-  bookingPricingId: string,
+  bookingPricingId: number,
   history: PricingHistoryType,
-  roomId: string,
-  options: { session?: ClientSession } = {}
+  roomId: number
 ) => {
   const from = new Date(history.appliedFrom);
   const now = history.appliedTo ? new Date(history.appliedTo) : new Date();
 
-  // Xác định mốc 12h trưa kế tiếp sau giờ check-in
+  // Xác định mốc 12h trưa kế tiếp
   const noonThreshold = new Date(from);
   noonThreshold.setHours(12, 0, 0, 0);
 
-  // Nếu check-in sau 12h trưa thì mốc chuẩn là 12h trưa hôm sau
   if (from.getHours() >= 12) {
     noonThreshold.setDate(noonThreshold.getDate() + 1);
   }
-
-  // So sánh với thời điểm hiện tại
+  console.log("Noon Threshold:", noonThreshold);
+  // Nếu chưa qua mốc 12h → chỉ tính tiền night
   if (now < noonThreshold) {
     history.amount = history.appliedNightPrice || 0;
     return { closedNight: history };
   }
 
-  const room = await findRoomById(roomId, options);
-  if (!room) throw new Error("Room not found");
+  // Transaction đảm bảo atomic
+  return await prisma.$transaction(async (tx) => {
+    const room = await tx.room.findUnique({
+      where: { id: roomId },
+    });
+    if (!room) throw new Error("Room not found");
 
-  const bookingPricing = await BookingPricing.findById(
-    bookingPricingId
-  ).session(options.session ?? null);
-  const booking = await Booking.findById(bookingPricing?.bookingId).session(
-    options.session ?? null
-  );
-  if (!bookingPricing || !booking) throw new Error("BookingPricing not found");
+    const bookingPricing = await tx.bookingPricing.findUnique({
+      where: { id: bookingPricingId },
+      include: { booking: { include: { note: true } }, history: true },
+    });
+    if (!bookingPricing) throw new Error("BookingPricing not found");
 
-  // đóng record Night
-  const lastHistory = bookingPricing.history[bookingPricing.history.length - 1];
-  lastHistory.appliedTo = noonThreshold;
-  lastHistory.amount = room.nightPrice;
-  lastHistory.appliedNightPrice = room.nightPrice;
+    const booking = bookingPricing.booking;
 
-  // tạo record HOUR mới
-  let nextHourHistory: PricingHistoryType = {
-    action: "CHANGE_TYPE",
-    priceType: "HOUR",
-    amount: 0, // sẽ update ngay bằng cacutaleHour
-    appliedFrom: noonThreshold.toISOString(),
-    appliedFirstHourPrice: 0,
-    appliedNextHourPrice: room.afterHoursPrice,
-  };
+    // đóng record NIGHT cuối
+    const lastHistory =
+      bookingPricing.history[bookingPricing.history.length - 1];
+    if (!lastHistory) throw new Error("No history found");
 
-  nextHourHistory = cacutaleHour(
-    nextHourHistory,
-    nextHourHistory.appliedNextHourPrice ?? 0,
-    nextHourHistory.appliedNextHourPrice ?? 0
-  );
+    await tx.pricingHistory.update({
+      where: { id: lastHistory.id },
+      data: {
+        appliedTo: noonThreshold,
+        amount: room.nightPrice,
+        appliedNightPrice: room.nightPrice,
+      },
+    });
 
-  bookingPricing.history.push(nextHourHistory as any);
+    let nextHourHistory: {
+      action: "CHANGE_TYPE";
+      priceType: string;
+      amount: number;
+      appliedFrom: string; // 🔥 phải là string
+      appliedFirstHourPrice: number;
+      appliedNextHourPrice: number;
+      appliedDayPrice: number;
+      appliedNightPrice: number;
+      bookingPricingId: number;
+    } = {
+      action: "CHANGE_TYPE",
+      priceType: "HOUR",
+      amount: 0,
+      appliedFrom: new Date(noonThreshold ).toISOString(),
+      appliedFirstHourPrice: 0,
+      appliedNextHourPrice: 0,
+      appliedDayPrice: 0,
+      appliedNightPrice: 0,
+      bookingPricingId: bookingPricing.id,
+    };
 
-  bookingPricing.priceType = "HOUR";
-  bookingPricing.startTime = noonThreshold;
+    // tính lại amount bằng cacutaleHour
+    const calcHour = cacutaleHour(
+      nextHourHistory,
+      nextHourHistory.appliedNextHourPrice ?? 0,
+      nextHourHistory.appliedNextHourPrice ?? 0
+    );
+    nextHourHistory.amount = calcHour.amount ?? 0;
 
-  if (!booking.note?.NegotiatedPrice || booking.note?.NegotiatedPrice <= 0) {
-    bookingPricing.calculatedAmount =
-      (bookingPricing.calculatedAmount || 0) +
-      (nextHourHistory.amount ?? room.originalPrice);
-  }
-  room.typeHire = 1;
-  await room.save({ session: options.session ?? null });
-  await bookingPricing.save({ session: options.session ?? null });
+    const createdHourHistory = await tx.pricingHistory.create({
+      data: nextHourHistory,
+    });
 
-  return { closedNight: history, nextHourHistory };
+    // cập nhật bookingPricing
+    await tx.bookingPricing.update({
+      where: { id: bookingPricing.id },
+      data: {
+        priceType: "HOUR",
+        startTime: noonThreshold,
+        calculatedAmount:
+          !booking.note?.NegotiatedPrice || booking.note?.NegotiatedPrice <= 0
+            ? bookingPricing.calculatedAmount +
+              (calcHour.amount ?? room.originalPrice)
+            : bookingPricing.calculatedAmount,
+      },
+    });
+
+    // cập nhật room
+    await tx.room.update({
+      where: { id: room.id },
+      data: { typeHire: 1 },
+    });
+
+    return { closedNight: history, nextHourHistory: createdHourHistory };
+  });
 };
 
 export const cacutaleDayAndUpdate = async (
-  bookingPricingId: string,
+  bookingPricingId: number,
   history: PricingHistoryType,
   roomId: string,
-  options: { session?: ClientSession } = {}
+  options: { tx?: any } = {}
 ) => {
   const from = new Date(history.appliedFrom);
   const now = history.appliedTo ? new Date(history.appliedTo) : new Date();
 
-  // mốc 24 tiếng sau appliedFrom
+  // Mốc 24 tiếng sau appliedFrom
   const nextDay = new Date(from);
-  nextDay.setDate(nextDay.getDate() + 1); // cộng 1 ngày
-  // giữ nguyên giờ/phút/giây (không reset về 12h như night)
+  nextDay.setDate(nextDay.getDate() + 1);
 
+  // ✅ chưa qua 24h => chỉ tính giá day
   if (now < nextDay) {
-    // ✅ chưa qua 24h => chỉ tính giá day
     history.amount = history.appliedDayPrice || 0;
     return { closedDay: history };
   }
 
   // ✅ đã qua 24h => cần truy vấn room & bookingPricing để update
-  const room = await findRoomById(roomId, options);
+  const room = await prisma.room.findUnique({
+    where: { id: Number(roomId) },
+  });
   if (!room) throw new Error("Room not found");
 
-  const bookingPricing = await BookingPricing.findById(
-    bookingPricingId
-  ).session(options.session ?? null);
-  const booking = await Booking.findById(bookingPricing?.bookingId).session(
-    options.session ?? null
-  );
+  const bookingPricing = await prisma.bookingPricing.findUnique({
+    where: { id: bookingPricingId },
+    include: { history: true, booking: { include: { note: true } } },
+  });
+  if (!bookingPricing || !bookingPricing.booking) {
+    throw new Error("BookingPricing not found");
+  }
 
-  if (!bookingPricing || !booking) throw new Error("BookingPricing not found");
-
+  // lấy history cuối cùng trong bookingPricing
   const lastHistory = bookingPricing.history[bookingPricing.history.length - 1];
-  lastHistory.appliedTo = nextDay;
-  lastHistory.amount = room.dayPrice;
-  lastHistory.appliedDayPrice = room.dayPrice;
+  if (!lastHistory) throw new Error("History not found");
 
-  // tạo record HOUR mới (Amount ban đầu = 0, sẽ tính dần bằng cacutaleHour)
+  // update history cuối (đóng Day)
+  await prisma.pricingHistory.update({
+    where: { id: lastHistory.id },
+    data: {
+      appliedTo: nextDay,
+      amount: room.dayPrice,
+      appliedDayPrice: room.dayPrice,
+    },
+  });
+
+  // tạo record HOUR mới
   let nextHourHistory: PricingHistoryType = {
     action: "CHANGE_TYPE",
     priceType: "HOUR",
-    amount: 0, // tạm thời, sẽ update bằng cacutaleHour
+    amount: 0, // sẽ tính ngay sau đây
     appliedFrom: nextDay.toISOString(),
     appliedFirstHourPrice: 0,
     appliedNextHourPrice: room.afterHoursPrice,
+    appliedDayPrice: 0,
+    appliedNightPrice: 0,
   };
 
-  // ✅ Tính tiền ngay bằng cacutaleHour
+  // ✅ Tính tiền bằng cacutaleHour
   nextHourHistory = cacutaleHour(
     nextHourHistory,
     nextHourHistory.appliedNextHourPrice ?? 0,
     nextHourHistory.appliedNextHourPrice ?? 0
   );
 
-  bookingPricing.history.push(nextHourHistory as any);
+  // insert history mới vào DB
+  const createdHourHistory = await prisma.pricingHistory.create({
+    data: {
+      action: nextHourHistory.action,
+      priceType: nextHourHistory.priceType,
+      amount: nextHourHistory.amount ?? 0,
+      appliedFrom: nextHourHistory.appliedFrom,
+      appliedTo: nextHourHistory.appliedTo ?? null,
+      appliedFirstHourPrice: nextHourHistory.appliedFirstHourPrice ?? 0,
+      appliedNextHourPrice: nextHourHistory.appliedNextHourPrice ?? 0,
+      appliedDayPrice: nextHourHistory.appliedDayPrice ?? 0,
+      appliedNightPrice: nextHourHistory.appliedNightPrice ?? 0,
+      bookingPricingId: bookingPricing.id,
+    },
+  });
 
-  // cập nhật BookingPricing main info
-  bookingPricing.priceType = "HOUR";
-  bookingPricing.startTime = nextDay;
-  if (!booking.note?.NegotiatedPrice || booking.note?.NegotiatedPrice < 0) {
-    bookingPricing.calculatedAmount =
-      (bookingPricing.calculatedAmount || 0) +
-      (nextHourHistory.amount ?? room.originalPrice);
-  }
-  room.typeHire = 1;
-  await room.save({ session: options.session ?? null });
-  await bookingPricing.save({ session: options.session ?? null });
+  // update BookingPricing main info
+  await prisma.bookingPricing.update({
+    where: { id: bookingPricing.id },
+    data: {
+      priceType: "HOUR",
+      startTime: nextDay,
+      calculatedAmount:
+        !bookingPricing.booking.note?.NegotiatedPrice ||
+        bookingPricing.booking.note?.NegotiatedPrice < 0
+          ? (bookingPricing.calculatedAmount || 0) +
+            (nextHourHistory.amount ?? room.originalPrice)
+          : bookingPricing.calculatedAmount,
+    },
+  });
 
-  return { closedDay: history, nextHourHistory };
+  // update room typeHire
+  await prisma.room.update({
+    where: { id: room.id },
+    data: { typeHire: 1 },
+  });
+
+  return { closedDay: history, nextHourHistory: createdHourHistory };
 };
 
 export const updateSpecificHourHistory = async (
   bookingPricingId: string,
   historyId: string,
   roomId: string,
-  options: { session?: ClientSession } = {}
+  options: { tx?: any } = {}
 ) => {
-  const room = await findRoomById(roomId, options);
+  // Lấy room
+  const room = await prisma.room.findUnique({
+    where: { id: Number(roomId) },
+  });
   if (!room) throw new Error("Room not found");
 
-  const bookingPricing = await BookingPricing.findById(
-    bookingPricingId
-  ).session(options.session ?? null);
-  const booking = await Booking.findById(bookingPricing?.bookingId).session(
-    options.session ?? null
-  );
+  // Lấy bookingPricing + booking + history cụ thể
+  const bookingPricing = await prisma.bookingPricing.findUnique({
+    where: { id: Number(bookingPricingId) },
+    include: {
+      booking: { include: { note: true } },
+      history: true,
+    },
+  });
 
-  if (!bookingPricing || !booking) throw new Error("BookingPricing not found");
+  if (!bookingPricing || !bookingPricing.booking) {
+    throw new Error("BookingPricing not found");
+  }
 
-  // Tìm history record cụ thể bằng _id sử dụng find()
   const historyRecord = bookingPricing.history.find(
-    (h) => h._id?.toString() === historyId
+    (h) => h.id === Number(historyId)
   );
-
   if (!historyRecord) {
     throw new Error("History record not found");
   }
@@ -310,12 +443,10 @@ export const updateSpecificHourHistory = async (
       historyRecord,
     };
   }
-
-  console.log("Updating HOUR history record:", historyRecord);
-
-  // Lưu lại amount cũ để tính toán chênh lệch
+  // Lưu lại amount cũ
   const oldAmount = historyRecord.amount || 0;
-  // Tính toán amount mới
+
+  // Tính toán amount mới bằng cacutaleHour
   const updatedHistory = cacutaleHour(
     {
       action: historyRecord.action,
@@ -327,31 +458,43 @@ export const updateSpecificHourHistory = async (
       appliedNextHourPrice: historyRecord.appliedNextHourPrice,
       appliedDayPrice: historyRecord.appliedDayPrice,
       appliedNightPrice: historyRecord.appliedNightPrice,
-    },
-    historyRecord.appliedFirstHourPrice || room.originalPrice,
-    historyRecord.appliedNextHourPrice || room.afterHoursPrice
+      bookingPricingId: bookingPricing.id,
+    } as PricingHistoryType,
+    historyRecord.appliedFirstHourPrice ?? room.originalPrice,
+    room.afterHoursPrice
   );
-
-  // Tính chênh lệch a = amount_mới - amount_cũ
+  // Tính chênh lệch
   const amountDifference =
     (updatedHistory.amount ?? room.originalPrice) - oldAmount;
 
-  // Cập nhật history record với amount mới
-  historyRecord.amount = updatedHistory.amount;
-  historyRecord.appliedFirstHourPrice = updatedHistory.appliedFirstHourPrice;
-  historyRecord.appliedNextHourPrice = updatedHistory.appliedNextHourPrice;
-  if (!booking.note?.NegotiatedPrice || booking.note?.NegotiatedPrice < 0) {
-    // Cập nhật calculatedAmount: cộng dồn chênh lệch
-    bookingPricing.calculatedAmount =
-      (bookingPricing.calculatedAmount || 0) + amountDifference;
-  }
+  // Cập nhật history record trong DB
+  const updatedHistoryRecord = await prisma.pricingHistory.update({
+    where: { id: historyRecord.id },
+    data: {
+      amount: updatedHistory.amount ?? 0,
+      appliedFirstHourPrice: updatedHistory.appliedFirstHourPrice ?? 0,
+      appliedNextHourPrice: updatedHistory.appliedNextHourPrice ?? 0,
+    },
+  });
 
-  await bookingPricing.save({ session: options.session ?? null });
+  // Nếu không có giá deal thì cập nhật calculatedAmount
+  let newCalculatedAmount = bookingPricing.calculatedAmount || 0;
+
+  if (
+    !bookingPricing.booking.note?.NegotiatedPrice ||
+    bookingPricing.booking.note?.NegotiatedPrice < 0
+  ) {
+    newCalculatedAmount += amountDifference;
+    await prisma.bookingPricing.update({
+      where: { id: bookingPricing.id },
+      data: { calculatedAmount: newCalculatedAmount },
+    });
+  }
 
   return {
     updated: true,
-    historyRecord,
-    calculatedAmount: bookingPricing.calculatedAmount,
+    historyRecord: updatedHistoryRecord,
+    calculatedAmount: newCalculatedAmount,
     amountDifference,
   };
 };

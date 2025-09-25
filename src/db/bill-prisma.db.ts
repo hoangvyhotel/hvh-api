@@ -10,8 +10,8 @@ export async function getBillsForMonth(
   year?: number,
   hotelId?: number
 ) {
-  const now = new Date();
-  const y = year ?? now.getFullYear();
+   const now = new Date();
+  const y = typeof year === "number" ? year : now.getFullYear();
 
   const start = new Date(y, month - 1, 1);
   const end = new Date(y, month, 1);
@@ -206,7 +206,7 @@ export const getBillsByHotelId = async (hotelId: number, date: string) => {
   const startOfDay = new Date(targetDate.setHours(0, 0, 0, 0));
   const endOfDay = new Date(targetDate.setHours(23, 59, 59, 999));
 
-  return prisma.bill.findMany({
+  const bills = await prisma.bill.findMany({
     where: {
       hotelId,
       checkIn: { lte: endOfDay },
@@ -216,4 +216,5 @@ export const getBillsByHotelId = async (hotelId: number, date: string) => {
       room: { select: { name: true } },
     },
   });
+  return bills.map((b) => ({...b, roomName: b.room?.name }));
 };

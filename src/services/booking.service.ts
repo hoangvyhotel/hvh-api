@@ -14,7 +14,7 @@ import * as bookingDb from "../db/booking.db";
 import { ResponseHelper } from "@/utils/response";
 import { BaseResponse } from "@/types/response";
 import * as bookingPrincingDb from "../db/booking-princing.db";
-import * as roomDb from "../db/room.db";
+import * as roomDb from "../db/room-prisma.db";
 import * as utilityDb from "../db/utility.db";
 import { AppError } from "@/utils/AppError";
 import { RoomModel } from "@/models/Room";
@@ -36,50 +36,52 @@ export const getRoomsByHotel = async (
 export const addBooking = async (
   req: BodyRequest<{ roomId: string; type: string }>
 ): Promise<BaseResponse<null>> => {
-  const session = await RoomModel.startSession();
-  session.startTransaction();
+  const { roomId, type } = req.body;
+
+  if (!["HOUR", "DAY", "NIGHT"].includes(type)) {
+    throw AppError.badRequest("Loại booking không hợp lệ");
+  }
 
   try {
-    const { roomId, type } = req.body;
-    if (!["HOUR", "DAY", "NIGHT"].includes(type)) {
-      throw AppError.badRequest("Loại booking không hợp lệ");
-    }
+    // Dùng Prisma transaction
+    await prisma.$transaction(async (tx) => {
+      const room = await roomDb.getRoom(roomId); // truyền tx nếu cần
 
-    const room = await roomDb.getRoom(roomId);
-    if (room.typeHire !== 0) {
-      throw AppError.conflict("Phòng đang được booking");
-    }
+      if (room.typeHire !== 0) {
+        throw AppError.conflict("Phòng đang được booking");
+      }
 
-    const pricingMap: Record<string, { amount: number; typeHire: number }> = {
-      HOUR: { amount: room.originalPrice, typeHire: 1 },
-      DAY: { amount: room.dayPrice, typeHire: 3 },
-      NIGHT: { amount: room.nightPrice, typeHire: 2 },
-    };
+      const pricingMap: Record<string, { amount: number; typeHire: number }> = {
+        HOUR: { amount: room.originalPrice, typeHire: 1 },
+        DAY: { amount: room.dayPrice, typeHire: 3 },
+        NIGHT: { amount: room.nightPrice, typeHire: 2 },
+      };
 
-    const { amount, typeHire } = pricingMap[type];
+      const { amount, typeHire } = pricingMap[type];
 
-    const bookingAdded = await bookingDb.AddBooking(roomId);
+      // Gọi hàm AddBooking có hỗ trợ transaction
+      const bookingAdded = await bookingDb.AddBooking(roomId);
 
-    await bookingPrincingDb.createBookingPricing({
-      bookingId: Number(bookingAdded.id),
-      priceType: type as "HOUR" | "DAY" | "NIGHT",
-      startTime: bookingAdded.createdAt!,
-      amount,
+      await bookingPrincingDb.createBookingPricing(
+        {
+          bookingId: Number(bookingAdded.id),
+          priceType: type as "HOUR" | "DAY" | "NIGHT",
+          startTime: bookingAdded.createdAt!,
+          amount,
+        }        
+      );
+
+      await roomDb.updateTypeHireRoom(roomId, typeHire);
     });
 
-    await roomDb.updateTypeHireRoom(roomId, typeHire, session);
-
-    await session.commitTransaction();
     return ResponseHelper.success(null, "Tạo booking thành công");
   } catch (error) {
-    await session.abortTransaction();
     throw error instanceof AppError
       ? error
       : AppError.internal("Lỗi khi tạo booking");
-  } finally {
-    session.endSession();
   }
 };
+
 
 export const changeTypeBooking = async (
   req: BodyRequest<{
@@ -131,18 +133,16 @@ export const AddNote = async (
   return ResponseHelper.success(null, "Thêm thành công");
 };
 
-// controller
 export const AddUtility = async (
   req: BodyRequest<{ utilityId: string; bookingId: string; quantity?: number }>
 ): Promise<BaseResponse<null>> => {
   const { utilityId, bookingId, quantity = 1 } = req.body;
 
-  // Validate input
   if (!utilityId || !bookingId) {
     throw AppError.badRequest("Thiếu utilityId hoặc bookingId");
   }
 
-  // Kiểm tra booking có tồn tại không
+  // 1. Kiểm tra booking có tồn tại không
   const booking = await prisma.booking.findUnique({
     where: { id: Number(bookingId) },
   });
@@ -150,7 +150,7 @@ export const AddUtility = async (
     throw AppError.notFound("Không tìm thấy booking");
   }
 
-  // Kiểm tra utility có tồn tại không
+  // 2. Kiểm tra utility có tồn tại không
   const utility = await prisma.utility.findUnique({
     where: { id: Number(utilityId) },
   });
@@ -158,17 +158,40 @@ export const AddUtility = async (
     throw AppError.notFound("Không tìm thấy dịch vụ/tiện ích");
   }
 
-  // Thêm utility vào booking items
-  await prisma.bookingItem.create({
-    data: {
+  // 3. Kiểm tra xem utility đã tồn tại trong booking chưa
+  const existingItem = await prisma.bookingItem.findFirst({
+    where: {
       bookingId: Number(bookingId),
       utilitiesId: Number(utilityId),
-      quantity,
     },
   });
 
+  if (existingItem) {
+    // Nếu tồn tại -> cộng thêm quantity
+    await prisma.bookingItem.update({
+      where: { id: existingItem.id },
+      data: {
+        quantity: existingItem.quantity + quantity,
+        price: utility.price, // luôn giữ giá hiện tại
+        name: utility.name,
+      },
+    });
+  } else {
+    // Nếu chưa tồn tại -> tạo mới
+    await prisma.bookingItem.create({
+      data: {
+        bookingId: Number(bookingId),
+        utilitiesId: Number(utilityId),
+        quantity,
+        price: utility.price,
+        name: utility.name,
+      },
+    });
+  }
+
   return ResponseHelper.success(null, "Thêm tiện ích thành công");
 };
+
 
 export const RemoveUtilityService = async (
   req: BodyRequest<{ bookingId: string; utilityId: string; quantity?: number }>
@@ -184,17 +207,17 @@ export const RemoveUtilityService = async (
   }
 };
 
-export const removeBooking = async (
-  req: ParamsRequest<{ id: string }>
-): Promise<BaseResponse<null>> => {
-  const { id } = req.params;
-  try {
-    await bookingDb.deleteBooking(id);
-    return ResponseHelper.success(null, "Hủy phòng thành công");
-  } catch (error: any) {
-    throw AppError.internal(error?.message || "Xảy ra lỗi khi hủy phòng");
-  }
-};
+  export const removeBooking = async (
+    req: ParamsRequest<{ id: string }>
+  ): Promise<BaseResponse<null>> => {
+    const { id } = req.params;
+    try {
+      await bookingDb.deleteBooking(Number(id));
+      return ResponseHelper.success(null, "Hủy phòng thành công");
+    } catch (error: any) {
+      throw AppError.internal(error?.message || "Xảy ra lỗi khi hủy phòng");
+    }
+  };
 export const getBookings = async (): Promise<any> => {
   const bookings = await bookingDb.getBookings();
   return ResponseHelper.success(bookings, "Lấy danh sách booking thành công");

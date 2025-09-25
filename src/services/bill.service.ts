@@ -10,11 +10,13 @@ import { ParamsRequest } from "@/types/request";
 import { changeRoomToAvailable, getHotelIdByRoomId } from "./room.service";
 import { getRoomsByHotelId } from "@/db/room-prisma.db";
 import { PrismaClient } from "../generated/prisma";
+import { getBillsForMonth } from "@/db/bill-prisma.db";
 const prisma = new PrismaClient();
 
 export class BillService {
   async getDailyTotals(month: number, year?: number, hotelId?: string) {
-    if (typeof month !== "number") {
+    // Validate month
+    if (!Number.isInteger(month)) {
       throw AppError.badRequest("Tham số tháng phải là số");
     }
     if (month < 1 || month > 12) {
@@ -27,76 +29,74 @@ export class BillService {
     const start = new Date(y, month - 1, 1);
     const end = new Date(y, month, 1);
 
-    // If hotelId provided, fetch rooms for the hotel and build set of roomId strings
-    let roomIdSet: Set<string> | null = null;
+    // Nếu có hotelId → lấy danh sách roomId
+    let roomIdSet: Set<number> | null = null;
     if (hotelId) {
-      const hotelIdCandidates: any[] = [];
       const hid = parseInt(hotelId, 10);
-
       if (isNaN(hid)) {
         throw AppError.badRequest("Hotel ID không hợp lệ");
       }
-      // also allow string match
-      hotelIdCandidates.push(hotelId);
 
       const rooms = await prisma.room.findMany({
         where: { hotelId: hid },
         select: { id: true },
       });
 
-      const roomIds = rooms.map((r: any) => r._id).filter(Boolean);
-      roomIdSet = new Set<string>(roomIds.map((id: any) => id.toString()));
-      // if no rooms, return empty days
+      const roomIds = rooms.map((r) => r.id);
       if (roomIds.length === 0) {
         const daysInMonthEmpty = new Date(y, month, 0).getDate();
         const now = new Date();
         let lastDayEmpty = daysInMonthEmpty;
         if (y === now.getFullYear() && month === now.getMonth() + 1)
           lastDayEmpty = Math.min(daysInMonthEmpty, now.getDate());
-        const itemsEmpty = [] as Array<{
+
+        const itemsEmpty: Array<{
           day: number;
           totalRoom: number;
           totalUtilities: number;
-        }>;
+        }> = [];
         for (let d = 1; d <= lastDayEmpty; d++)
           itemsEmpty.push({ day: d, totalRoom: 0, totalUtilities: 0 });
+
         return { items: itemsEmpty };
       }
+
+      roomIdSet = new Set<number>(roomIds);
     }
 
-    // fetch bills for the month (no hotel filtering) then filter client-side by roomId string
-    const rawBills: any[] = await db.getBillsForMonth(month, y);
-    console.log("data", rawBills);
-    // build a map day -> totals
+    // fetch bills for the month
+    const rawBills = await getBillsForMonth(
+      month,
+      year,
+      hotelId ? parseInt(hotelId, 10) : undefined
+    );
+
     const daysInMonth = new Date(y, month, 0).getDate();
     const now = new Date();
     let lastDay = daysInMonth;
     if (y === now.getFullYear() && month === now.getMonth() + 1)
       lastDay = Math.min(daysInMonth, now.getDate());
 
+    // map day -> totals
     const map = new Map<
       number,
       { totalRoom: number; totalUtilities: number }
     >();
 
     for (const b of rawBills) {
-      const created = (b as any).createdAt
-        ? new Date((b as any).createdAt)
-        : null;
+      const created = b.createdAt ? new Date(b.createdAt) : null;
       if (!created) continue;
       if (created < start || created >= end) continue; // ensure within month
-      const roomId = (b as any).roomId ? (b as any).roomId.toString() : null;
-      if (roomIdSet && !roomId) continue;
+
+      const roomId = b.roomId;
       if (roomIdSet && !roomIdSet.has(roomId)) continue; // not a bill for this hotel's rooms
 
       const day = created.getDate();
       if (day < 1 || day > daysInMonth) continue;
-      const room = Number(
-        (b as any).totalRoomPrice ?? (b as any).totalRoom ?? 0
-      );
-      const util = Number(
-        (b as any).totalUtilitiesPrice ?? (b as any).totalUtilities ?? 0
-      );
+
+      const room = Number(b.totalRoomPrice ?? 0);
+      const util = Number(b.totalUtilitiesPrice ?? 0);
+
       const prev = map.get(day);
       if (prev) {
         prev.totalRoom += room;
@@ -124,6 +124,7 @@ export class BillService {
       totalUtilities: number;
       total: number;
     }> = [];
+
     for (let d = 1; d <= lastDay; d++) {
       const v = map.get(d) || { totalRoom: 0, totalUtilities: 0 };
       const dt = new Date(y, month - 1, d);
@@ -182,36 +183,39 @@ export class BillService {
         return { totals: { totalRoom: 0, totalUtilities: 0, total: 0 } };
       }
 
-      roomIdSet = new Set<number>(rooms.map((r: { id: any }) => r.id));
+      roomIdSet = new Set<number>(rooms.map((r) => r.id));
     }
 
     // fetch raw bills and sum
-    const rawBills: any[] = await db.getBillsForMonth(month, y);
+    const rawBills = await getBillsForMonth(
+      month,
+      year,
+      hotelId ? parseInt(hotelId, 10) : undefined
+    );
+
     let totalRoom = 0;
     let totalUtilities = 0;
     const now = new Date();
 
     for (const b of rawBills) {
-      const created = (b as any).createdAt
-        ? new Date((b as any).createdAt)
-        : null;
+      const created = b.createdAt ? new Date(b.createdAt) : null;
       if (!created) continue;
+
       if (created < start || created >= end) continue;
-      // skip future-dated bills in current month
+
+      // skip future-dated bills trong tháng hiện tại
       if (
         y === now.getFullYear() &&
         month === now.getMonth() + 1 &&
         created > now
       )
         continue;
-      const roomId = (b as any).roomId ? (b as any).roomId.toString() : null;
+
+      const roomId = b.roomId;
       if (roomIdSet && !roomIdSet.has(roomId)) continue;
-      totalRoom += Number(
-        (b as any).totalRoomPrice ?? (b as any).totalRoom ?? 0
-      );
-      totalUtilities += Number(
-        (b as any).totalUtilitiesPrice ?? (b as any).totalUtilities ?? 0
-      );
+
+      totalRoom += Number(b.totalRoomPrice ?? 0);
+      totalUtilities += Number(b.totalUtilitiesPrice ?? 0);
     }
 
     const total = totalRoom + totalUtilities;
@@ -251,24 +255,24 @@ export class BillService {
 
     const hotelId = await getHotelIdByRoomId(roomId);
 
-    const billToSave: IBill = {
-      roomId: new Types.ObjectId(roomId),
-      hotelId: new Types.ObjectId(hotelId),
+    const billToSave: any = {
+      roomId: Number(roomId),
+      hotelId: Number(hotelId),
       totalRoomPrice,
       totalUtilitiesPrice,
       checkIn: bookingInfo.CheckinDate,
       checkOut: new Date(),
-    } as IBill;
+    } as any;
 
     // Save bill to database
     const savedBill = await db.createBill(billToSave);
 
     // Lưu xong bill. xóa booking và booking pricing, cập nhật lại trạng thái phòng
-    await bookingDb.deleteBooking(bookingInfo.BookingId.toString());
-    await bookingPrincingDb.deleteBookingPricing(Number(bookingInfo.BookingId));
+    await bookingDb.deleteBooking(Number(bookingInfo.BookingId));
+    // await bookingPrincingDb.deleteBookingPricing(Number(bookingInfo.BookingId));
 
     // reset room status to 'available'
-    await changeRoomToAvailable(roomId);
+    // await changeRoomToAvailable(roomId);
 
     return savedBill;
   }
