@@ -14,7 +14,7 @@ import { AppError } from "@/utils/AppError";
 import { UpdateRangePrice } from "@/types/request/room/UpdateRangePriceRequest.type";
 import { UpdateRoomRequest } from "@/types/request/room/UpdateRoomRequest.type";
 import { PrismaClient } from "../generated/prisma";
-import { Room } from "@/generated/prisma";
+import { Room } from "../generated/prisma";
 const prisma = new PrismaClient();
 
 // CREATE - Tạo room mới

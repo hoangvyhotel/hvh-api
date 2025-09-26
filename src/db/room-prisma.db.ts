@@ -1,4 +1,4 @@
-import { PrismaClient, Room } from "@/generated/prisma";
+import { PrismaClient, Room } from "../generated/prisma";
 import { UpdatePrice } from "@/types/request/room/UpdateRangePriceRequest.type";
 import { UpdateRoomRequest } from "@/types/request/room/UpdateRoomRequest.type";
 import { RoomAvailable, RoomResponse } from "@/types/response/roomResponse";
@@ -25,21 +25,23 @@ export const getRoomsByHotelId = async (
     orderBy: [{ floor: "asc" }, { name: "asc" }],
   });
 
-  return rooms.map((room) => ({
-    id: room.id.toString(),
-    name: room.name ?? "",
-    floor: room.floor,
-    originalPrice: room.originalPrice,
-    afterHoursPrice: room.afterHoursPrice,
-    dayPrice: room.dayPrice,
-    nightPrice: room.nightPrice,
-    description: room.description ?? "",
-    typeHire: room.typeHire,
-    status: room.status,
-    hotelId: room.hotelId.toString(),
-    createdAt: room.createdAt,
-    updatedAt: room.updatedAt,
-  })) ?? [];
+  return (
+    rooms.map((room) => ({
+      id: room.id.toString(),
+      name: room.name ?? "",
+      floor: room.floor,
+      originalPrice: room.originalPrice,
+      afterHoursPrice: room.afterHoursPrice,
+      dayPrice: room.dayPrice,
+      nightPrice: room.nightPrice,
+      description: room.description ?? "",
+      typeHire: room.typeHire,
+      status: room.status,
+      hotelId: room.hotelId.toString(),
+      createdAt: room.createdAt,
+      updatedAt: room.updatedAt,
+    })) ?? []
+  );
 };
 
 export async function saveRoom(room: Omit<Room, "id">) {
@@ -61,7 +63,7 @@ export async function updateRoomById(id: string, roomData: UpdateRoomRequest) {
       typeHire: roomData.typeHire,
       status: roomData.status,
       updatedAt: new Date(),
-    }
+    },
   });
   return updatedRoom;
 }
@@ -122,10 +124,7 @@ export const getRoom = async (id: string): Promise<any> => {
   return room;
 };
 
-export const updateTypeHireRoom = async (
-  roomId: string,
-  typeHire: number
-) => {
+export const updateTypeHireRoom = async (roomId: string, typeHire: number) => {
   const result = await prisma.room.update({
     where: { id: parseInt(roomId) },
     data: { typeHire },

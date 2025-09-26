@@ -4,7 +4,7 @@ import { PrismaClient } from "../generated/prisma";
 import { BookingPricing, GetBookingInfo, Note } from "@/types/response/booking";
 import { AppError } from "@/utils/AppError";
 import { calculateAndUpdatePricing } from "@/utils/booking-prisma.util";
-import { $Enums, PricingHistory } from "@/generated/prisma";
+import { $Enums, PricingHistory } from "../generated/prisma";
 const prisma = new PrismaClient();
 
 type UtilitiesForBooking = {

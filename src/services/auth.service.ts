@@ -12,7 +12,7 @@ import {
   RegisterResponse,
 } from "@/types/response/auth";
 import { generateAccessToken } from "@/utils/jwt";
-import { PrismaClient } from "@/generated/prisma";
+import { PrismaClient } from "../generated/prisma";
 import { database } from "@/config/database-prisma";
 
 const prisma = database.getClient();

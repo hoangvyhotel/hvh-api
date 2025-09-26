@@ -1,4 +1,3 @@
-import "tsconfig-paths/register";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -15,7 +14,10 @@ import { AppError } from "@/utils/AppError";
 // Import routes
 import apiRoute from "@/api/index";
 import { handleError } from "./utils/errorHandler";
-import { corsDebugMiddleware, addCorsDebugHeaders } from "@/middleware/cors-debug";
+import {
+  corsDebugMiddleware,
+  addCorsDebugHeaders,
+} from "@/middleware/cors-debug";
 import { env } from "process";
 
 // Load environment variables
@@ -59,8 +61,8 @@ class App {
     );
 
     // CORS configuration
-    const allowedOrigins = process.env.ALLOWED_ORIGINS 
-      ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
+    const allowedOrigins = process.env.ALLOWED_ORIGINS
+      ? process.env.ALLOWED_ORIGINS.split(",").map((origin) => origin.trim())
       : [
           "http://localhost:3000",
           "http://localhost:5173",
@@ -75,28 +77,30 @@ class App {
         origin: (origin, callback) => {
           // Allow requests with no origin (mobile apps, postman, etc.)
           if (!origin) return callback(null, true);
-          
+
           // Check if the origin is allowed
           if (allowedOrigins.includes(origin)) {
             return callback(null, true);
           }
-          
+
           // Log blocked origin for debugging
           logger.warn(`🚫 CORS blocked origin: ${origin}`);
-          return callback(new Error(`Origin ${origin} not allowed by CORS`), false);
+          return callback(
+            new Error(`Origin ${origin} not allowed by CORS`),
+            false
+          );
         },
         credentials: true,
         methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
         allowedHeaders: [
-          "Content-Type", 
-          "Authorization", 
+          "Content-Type",
+          "Authorization",
           "X-Requested-With",
           "Accept",
-          "Origin"
+          "Origin",
         ],
       })
     );
-
 
     // Body parsing middleware
     this.app.use(express.json({ limit: "10mb" }));

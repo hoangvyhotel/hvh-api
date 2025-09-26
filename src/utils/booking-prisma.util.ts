@@ -1,5 +1,5 @@
 import { PricingHistoryType } from "@/types/response/booking";
-import { PrismaClient } from "@/generated/prisma";
+import { PrismaClient } from "../generated/prisma";
 import { AppError } from "./AppError";
 const prisma = new PrismaClient();
 
@@ -13,7 +13,6 @@ export const calculateAndUpdatePricing = async (
     where: { id: bookingPricingId },
     include: { history: true },
   });
-
 
   if (!bookingPricing) {
     throw new Error("BookingPricing not found");
@@ -132,7 +131,6 @@ async function recalculateBookingPricing(bookingId: number) {
 
   return { booking, bookingPricing: updatedBookingPricing };
 }
-
 
 const cacutaleTime = (appliedFrom: string, appliedTo?: string): number => {
   if (!appliedFrom) return 0;
@@ -253,9 +251,9 @@ export const cacutaleNightAndUpdate = async (
       action: "CHANGE_TYPE",
       priceType: "HOUR",
       amount: 0,
-      appliedFrom: new Date(noonThreshold ).toISOString(),
-      appliedFirstHourPrice: 0,
-      appliedNextHourPrice: 0,
+      appliedFrom: new Date(noonThreshold).toISOString(),
+      appliedFirstHourPrice: room.afterHoursPrice,
+      appliedNextHourPrice: room.afterHoursPrice,
       appliedDayPrice: 0,
       appliedNightPrice: 0,
       bookingPricingId: bookingPricing.id,
@@ -350,7 +348,7 @@ export const cacutaleDayAndUpdate = async (
     priceType: "HOUR",
     amount: 0, // sẽ tính ngay sau đây
     appliedFrom: nextDay.toISOString(),
-    appliedFirstHourPrice: 0,
+    appliedFirstHourPrice: room.afterHoursPrice,
     appliedNextHourPrice: room.afterHoursPrice,
     appliedDayPrice: 0,
     appliedNightPrice: 0,

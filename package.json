@@ -2,15 +2,14 @@
   "name": "hvh-api",
   "version": "1.0.0",
   "description": "Hotel Management System Backend API",
-  "main": "dist/app.js",
+  "main": "dist/server-prisma.js",
   "scripts": {
-    "start": "node scripts/setup-aliases.js && node -r module-alias/register dist/server-prisma.js",
-    "start:prod": "NODE_ENV=production node scripts/setup-aliases.js && node -r module-alias/register dist/app.js",
-    "start:mysql": "node scripts/setup-aliases.js && node -r module-alias/register dist/server-prisma.js",
-    "dev": "node scripts/setup-aliases.js && nodemon src/app.ts",
-    "dev:mysql": "node scripts/setup-aliases.js && nodemon --config nodemon.mysql.json",
-    "build": "npm run prebuild && tsc && npm run build:aliases",
+    "start:prod": "NODE_ENV=production node scripts/setup-aliases.js && node --max-old-space-size=512 -r module-alias/register dist/server-prisma.js",
+    "start": "node scripts/setup-aliases.js && node --max-old-space-size=512 -r module-alias/register dist/server-prisma.js",
+    "dev": "node scripts/setup-aliases.js && nodemon --config nodemon.mysql.json",
+    "build": "npm run prebuild && tsc && npm run build:aliases && npm run copy:prisma",
     "build:aliases": "tsc-alias",
+    "copy:prisma": "xcopy /E /I src\\generated dist\\generated",
     "prebuild": "rimraf dist",
     "test": "jest",
     "lint": "eslint src/**/*.ts",
@@ -69,7 +68,7 @@
     "zod": "^3.22.4"
   },
   "_moduleAliases": {
-    "@": "src"
+    "@": "dist"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
